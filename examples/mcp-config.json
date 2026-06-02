@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "popularvideo": {
+      "command": "popularvideo-mcp",
+      "args": [],
+      "env": {
+        "CINLINK_API_KEY": "ck_live_or_test_xxx"
+      }
+    }
+  }
+}
