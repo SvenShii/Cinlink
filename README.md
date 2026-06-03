@@ -1,14 +1,6 @@
-<<<<<<< HEAD
-cinlink cli
-=======
 # PopularVideoCLI
 
-Standalone PopularVideo/CinLink CLI for agents. This project is intentionally separate from:
-
-- `D:\工作\Video Agent\code\PopularVideo`
-- `D:\工作\Video Agent\code\PopularVideoWindows`
-
-It does not import or modify either repository. Hosted media work is called through HTTP. Local-only work, such as burning subtitles into a video, uses local `ffmpeg`.
+Standalone PopularVideo/CinLink CLI for agents. This project is intentionally separate from the desktop app repositories.
 
 Product policy:
 
@@ -18,14 +10,48 @@ Product policy:
 - If the user asks for voice separation, vocal removal, or preserving background music through local separation, the user must install local `ffmpeg`, `demucs`, and `soundfile`.
 - Agents should never install local dependencies silently. They should ask for explicit user confirmation first.
 
-## Install
+## Windows Install
+
+Recommended one-command install from GitHub:
 
 ```powershell
-cd "D:\工作\Video Agent\code\PopularVideoCLI"
-python -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -e .
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1
 ```
+
+Install from a specific Git URL:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -Source "git+https://github.com/SvenShii/Cinlink.git"
+```
+
+Install from the current checkout while developing:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -Editable
+```
+
+The installer:
+
+- Installs or upgrades the package with `pip`.
+- Finds Python's Scripts directory.
+- Adds that directory to the user-level `PATH`.
+- Updates the current PowerShell session `PATH`.
+- Runs `popularvideo --json doctor`.
+
+If you pass an API key, the installer also writes CLI config:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -ApiKey "ck_live_or_test_xxx"
+```
+
+## Manual Install
+
+```powershell
+pip install "git+https://github.com/SvenShii/Cinlink.git"
+popularvideo --json doctor
+```
+
+If `popularvideo` is not found after manual install, use the installer above or add Python's Scripts directory to the user `PATH`.
 
 ## Configure
 
@@ -33,8 +59,6 @@ pip install -e .
 popularvideo --json onboarding --api-key ck_live_or_test_xxx
 popularvideo --json doctor
 ```
-
-`doctor` reports both hosted health and local dependency status.
 
 Environment variables can also be used:
 
@@ -58,23 +82,14 @@ popularvideo --json shorten "D:\videos\demo.mp4" --target-duration 45
 popularvideo --json image "a clean product poster"
 popularvideo --json video "a 5 second cinematic product reveal"
 
-popularvideo --json agent run "把这个视频总结成 5 条卖点，再生成一个封面图" --context-file "D:\videos\demo.mp4"
+popularvideo --json agent run "Summarize this video into five selling points" --context-file "D:\videos\demo.mp4"
 popularvideo --json agent poll run_xxx
 popularvideo --json agent local-tools run_xxx
 ```
 
 ## Stable JSON Contract
 
-Successful commands print one JSON object to stdout:
-
-```json
-{
-  "status": "done",
-  "subtitle_path": "D:/videos/demo.popularvideo/subtitle.srt"
-}
-```
-
-Failed commands also print JSON:
+Successful commands print one JSON object to stdout. Failed commands also print JSON:
 
 ```json
 {
@@ -97,17 +112,6 @@ Common error codes:
 - `processing_failed`
 - `timeout`
 - `internal_error`
-
-For voice separation requests, a missing local runtime returns:
-
-```json
-{
-  "error": {
-    "code": "dependency_missing",
-    "message": "Voice separation is a local capability. The hosted server does not provide Demucs, so ask the user to install local voice separation components before continuing."
-  }
-}
-```
 
 ## MCP
 
@@ -133,15 +137,6 @@ Example MCP config:
 }
 ```
 
-See `examples/mcp-config.json`.
-
 ## Skill Wrappers
 
-The `skills/` directory contains thin wrappers for agent systems that prefer skill/plugin files instead of MCP:
-
-- `skills/call_popularvideo_tool.py`
-- `skills/openclaw/popularvideo.skill.json`
-- `skills/hermes/popularvideo_tools.yaml`
-
-These files are templates. Different OpenClaw/Hermes builds may use different manifest field names, so keep the command shape but adjust manifest metadata to match the agent version you run.
->>>>>>> 3e2c153 (Initial PopularVideo CLI agent protocol)
+The `skills/` directory contains thin wrappers for agent systems that prefer skill/plugin files instead of MCP.
