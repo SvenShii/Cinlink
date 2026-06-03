@@ -11,7 +11,7 @@ $ErrorActionPreference = "Stop"
 
 function Write-Step {
   param([string]$Message)
-  Write-Host "[PopularVideoCLI] $Message"
+  Write-Host "[CinLinkCLI] $Message"
 }
 
 function Get-PythonCommand {
@@ -68,6 +68,9 @@ Write-Step "Using Python: $($python -join ' ')"
 
 Invoke-Python $python @("-m", "pip", "install", "--upgrade", "pip")
 
+Write-Step "Removing legacy popularvideo-cli package if present"
+Invoke-Python $python @("-m", "pip", "uninstall", "-y", "popularvideo-cli")
+
 if ($Editable) {
   Write-Step "Installing editable package from current directory"
   Invoke-Python $python @("-m", "pip", "install", "-e", ".")
@@ -91,11 +94,11 @@ if ($ApiKey) {
   if ($BillingBase) {
     $onboardingArgs += @("--billing-base", $BillingBase)
   }
-  Write-Step "Writing PopularVideo API configuration"
-  & (Join-Path $scriptsDir "popularvideo.exe") @onboardingArgs
+  Write-Step "Writing CinLink API configuration"
+  & (Join-Path $scriptsDir "cinlink.exe") @onboardingArgs
 }
 
 Write-Step "Running doctor"
-& (Join-Path $scriptsDir "popularvideo.exe") --json doctor
+& (Join-Path $scriptsDir "cinlink.exe") --json doctor
 
-Write-Step "Done. Restart terminals that were already open before this install if they cannot find popularvideo."
+Write-Step "Done. Restart terminals that were already open before this install if they cannot find cinlink."

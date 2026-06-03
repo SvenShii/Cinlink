@@ -1,53 +1,53 @@
 {
-  "name": "popularvideo",
-  "description": "Use PopularVideo/CinLink media tools through the standalone CLI.",
+  "name": "cinlink",
+  "description": "Use CinLink media tools through the standalone CLI.",
   "command": "python",
   "args": [
-    "D:/工作/Video Agent/code/PopularVideoCLI/skills/call_popularvideo_tool.py"
+    "skills/call_cinlink_tool.py"
   ],
   "tools": [
     {
-      "name": "popularvideo_doctor",
+      "name": "cinlink_doctor",
       "description": "Check hosted runtime health and local dependency status before local-only tasks.",
       "tool_arg": "doctor"
     },
     {
-      "name": "popularvideo_agent_run",
-      "description": "Submit a natural-language media task to the PopularVideo hosted agent.",
+      "name": "cinlink_agent_run",
+      "description": "Submit a natural-language media task to the CinLink hosted agent.",
       "tool_arg": "agent_run"
     },
     {
-      "name": "popularvideo_transcribe",
+      "name": "cinlink_transcribe",
       "description": "Transcribe a local media file into subtitles.",
       "tool_arg": "transcribe"
     },
     {
-      "name": "popularvideo_translate",
+      "name": "cinlink_translate",
       "description": "Translate subtitles or media.",
       "tool_arg": "translate"
     },
     {
-      "name": "popularvideo_burn",
+      "name": "cinlink_burn",
       "description": "Burn subtitles into a local video with ffmpeg.",
       "tool_arg": "burn"
     },
     {
-      "name": "popularvideo_summarize",
+      "name": "cinlink_summarize",
       "description": "Summarize a local video or subtitle file.",
       "tool_arg": "summarize"
     },
     {
-      "name": "popularvideo_shorten",
+      "name": "cinlink_shorten",
       "description": "Create a highlight plan for a local video.",
       "tool_arg": "shorten"
     },
     {
-      "name": "popularvideo_image",
+      "name": "cinlink_image",
       "description": "Generate an image from a prompt.",
       "tool_arg": "image"
     },
     {
-      "name": "popularvideo_video",
+      "name": "cinlink_video",
       "description": "Generate a video from a prompt.",
       "tool_arg": "video"
     }

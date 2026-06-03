@@ -25,7 +25,7 @@ def emit(payload: Any, json_output: bool = True) -> None:
 
 
 def build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="popularvideo")
+    parser = argparse.ArgumentParser(prog="cinlink")
     parser.add_argument("--json", action="store_true", default=False, help="Emit JSON. Agent commands should always use this.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 

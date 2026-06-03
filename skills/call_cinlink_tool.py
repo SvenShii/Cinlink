@@ -7,7 +7,7 @@ import sys
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(prog="call_popularvideo_tool")
+    parser = argparse.ArgumentParser(prog="call_cinlink_tool")
     parser.add_argument("tool", choices=["doctor", "transcribe", "translate", "burn", "summarize", "shorten", "image", "video", "nlu", "agent_run"])
     parser.add_argument("--args-json", required=True, help="JSON object containing tool arguments.")
     ns = parser.parse_args()
@@ -29,7 +29,7 @@ def main() -> int:
 
 
 def build_command(tool: str, args: dict) -> list[str]:
-    base = ["popularvideo", "--json"]
+    base = ["cinlink", "--json"]
     if tool == "doctor":
         return base + ["doctor"]
     if tool == "transcribe":

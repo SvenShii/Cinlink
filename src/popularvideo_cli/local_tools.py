@@ -21,7 +21,7 @@ def burn_subtitles(
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise CliError("dependency_missing", "ffmpeg was not found on PATH. Install ffmpeg with subtitles/libass support.")
-    output_dir = (out.expanduser().resolve() if out else video.parent / f"{video.stem}.popularvideo")
+    output_dir = (out.expanduser().resolve() if out else video.parent / f"{video.stem}.cinlink")
     output_dir.mkdir(parents=True, exist_ok=True)
     output_path = output_dir / f"{video.stem}.subtitled.mp4"
     margin_v = 24 if position == "bottom" else 48

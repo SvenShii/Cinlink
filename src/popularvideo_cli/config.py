@@ -11,7 +11,8 @@ from .errors import CliError
 
 DEFAULT_RUNTIME_BASE = "https://runtime.cinlink.ai"
 DEFAULT_BILLING_BASE = "https://app.cinlink.ai"
-CONFIG_ENV = "POPULARVIDEO_CLI_CONFIG"
+CONFIG_ENV = "CINLINK_CLI_CONFIG"
+LEGACY_CONFIG_ENV = "POPULARVIDEO_CLI_CONFIG"
 
 
 @dataclass
@@ -25,18 +26,18 @@ class Settings:
     @property
     def auth_headers(self) -> dict[str, str]:
         if not self.api_key:
-            raise CliError("auth_failed", "API key is not configured. Run `popularvideo onboarding --api-key <key>` first.")
+            raise CliError("auth_failed", "API key is not configured. Run `cinlink onboarding --api-key <key>` first.")
         return {"X-API-Key": self.api_key, "Authorization": f"Bearer {self.api_key}"}
 
 
 def config_path() -> Path:
-    explicit = os.environ.get(CONFIG_ENV)
+    explicit = os.environ.get(CONFIG_ENV) or os.environ.get(LEGACY_CONFIG_ENV)
     if explicit:
         return Path(explicit).expanduser()
     if os.name == "nt":
         root = Path(os.environ.get("APPDATA") or Path.home() / "AppData" / "Roaming")
-        return root / "PopularVideoCLI" / "config.json"
-    return Path.home() / ".config" / "popularvideo-cli" / "config.json"
+        return root / "CinLinkCLI" / "config.json"
+    return Path.home() / ".config" / "cinlink-cli" / "config.json"
 
 
 def legacy_addsubtitle_config_path() -> Path:
@@ -79,7 +80,7 @@ def load_settings(allow_missing_api_key: bool = False) -> Settings:
         poll_interval_sec=float(data.get("poll_interval_sec") or 2.0),
     )
     if not settings.api_key and not allow_missing_api_key:
-        raise CliError("auth_failed", "API key is not configured. Run `popularvideo onboarding --api-key <key>` first.")
+        raise CliError("auth_failed", "API key is not configured. Run `cinlink onboarding --api-key <key>` first.")
     return settings
 
 

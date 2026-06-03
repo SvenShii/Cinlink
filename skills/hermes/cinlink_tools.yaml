@@ -1,0 +1,37 @@
+name: cinlink
+description: CinLink tools exposed through the standalone CLI.
+tools:
+  - name: cinlink_doctor
+    command: cinlink --json doctor
+    args_schema: {}
+  - name: cinlink_agent_run
+    command: cinlink --json agent run "{prompt}"
+    args_schema:
+      prompt: string
+      context_file: string[]
+      mode: string
+      wait: boolean
+  - name: cinlink_transcribe
+    command: cinlink --json transcribe "{input_path}"
+    args_schema:
+      input_path: string
+      lang: string
+      out: string
+  - name: cinlink_translate
+    command: cinlink --json translate "{input_path}" --to "{to_lang}"
+    args_schema:
+      input_path: string
+      from_lang: string
+      to_lang: string
+      bilingual: boolean
+      delivery: string
+      out: string
+  - name: cinlink_burn
+    command: cinlink --json burn "{video_path}" --subtitle "{subtitle_path}"
+    args_schema:
+      video_path: string
+      subtitle_path: string
+      out: string
+  - name: cinlink_mcp
+    command: cinlink-mcp
+    transport: stdio

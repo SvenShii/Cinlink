@@ -1,6 +1,6 @@
 # 服务端配合修改清单
 
-本 CLI 没有修改主仓库和 Windows App。下面是为了让 agent 工具协议更完整，建议服务端同事后续在 `PopularVideo` 主仓中补的点。
+本 CLI 没有修改主仓库和 Windows App。下面是为了让 agent 工具协议更完整，建议服务端同事后续在 `CinLink` 主仓中补的点。
 
 ## 1. `/v1/agent/events/{run_id}` SSE
 
@@ -44,7 +44,7 @@ requires_user_input
 这样 CLI 可以加：
 
 ```powershell
-popularvideo --json agent stream run_xxx
+cinlink --json agent stream run_xxx
 ```
 
 ## 2. Agent run 支持上传本地文件
@@ -102,7 +102,7 @@ client_capabilities
 CLI 可增加：
 
 ```powershell
-popularvideo --json artifacts download artifact_xxx --out D:\out
+cinlink --json artifacts download artifact_xxx --out D:\out
 ```
 
 ## 4. Tool schema 服务端接口
@@ -110,8 +110,8 @@ popularvideo --json artifacts download artifact_xxx --out D:\out
 CLI 本地已有：
 
 ```powershell
-popularvideo --json tools list
-popularvideo --json tools schema transcribe
+cinlink --json tools list
+cinlink --json tools schema transcribe
 ```
 
 建议服务端也暴露：
@@ -153,7 +153,7 @@ render_highlight_clips:
 CLI 后续可加：
 
 ```powershell
-popularvideo --json agent execute-local-tools run_xxx
+cinlink --json agent execute-local-tools run_xxx
 ```
 
 自动执行服务端要求的本地工具并回报结果。

@@ -1,6 +1,6 @@
-# PopularVideoCLI
+# CinLinkCLI
 
-Standalone PopularVideo/CinLink CLI for agents. This project is intentionally separate from the desktop app repositories.
+Standalone CinLink CLI for agents. This project is intentionally separate from the desktop app repositories.
 
 Product policy:
 
@@ -36,7 +36,7 @@ The installer:
 - Finds Python's Scripts directory.
 - Adds that directory to the user-level `PATH`.
 - Updates the current PowerShell session `PATH`.
-- Runs `popularvideo --json doctor`.
+- Runs `cinlink --json doctor`.
 
 If you pass an API key, the installer also writes CLI config:
 
@@ -48,16 +48,16 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -ApiKey "
 
 ```powershell
 pip install "git+https://github.com/SvenShii/Cinlink.git"
-popularvideo --json doctor
+cinlink --json doctor
 ```
 
-If `popularvideo` is not found after manual install, use the installer above or add Python's Scripts directory to the user `PATH`.
+If `cinlink` is not found after manual install, use the installer above or add Python's Scripts directory to the user `PATH`.
 
 ## Configure
 
 ```powershell
-popularvideo --json onboarding --api-key ck_live_or_test_xxx
-popularvideo --json doctor
+cinlink --json onboarding --api-key ck_live_or_test_xxx
+cinlink --json doctor
 ```
 
 Environment variables can also be used:
@@ -71,20 +71,20 @@ $env:CINLINK_BILLING_BASE="https://app.cinlink.ai"
 ## CLI Examples
 
 ```powershell
-popularvideo --json tools list
-popularvideo --json tools schema transcribe
+cinlink --json tools list
+cinlink --json tools schema transcribe
 
-popularvideo --json transcribe "D:\videos\demo.mp4"
-popularvideo --json translate "D:\videos\demo.srt" --to en
-popularvideo --json burn "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt"
-popularvideo --json summarize "D:\videos\demo.mp4"
-popularvideo --json shorten "D:\videos\demo.mp4" --target-duration 45
-popularvideo --json image "a clean product poster"
-popularvideo --json video "a 5 second cinematic product reveal"
+cinlink --json transcribe "D:\videos\demo.mp4"
+cinlink --json translate "D:\videos\demo.srt" --to en
+cinlink --json burn "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt"
+cinlink --json summarize "D:\videos\demo.mp4"
+cinlink --json shorten "D:\videos\demo.mp4" --target-duration 45
+cinlink --json image "a clean product poster"
+cinlink --json video "a 5 second cinematic product reveal"
 
-popularvideo --json agent run "Summarize this video into five selling points" --context-file "D:\videos\demo.mp4"
-popularvideo --json agent poll run_xxx
-popularvideo --json agent local-tools run_xxx
+cinlink --json agent run "Summarize this video into five selling points" --context-file "D:\videos\demo.mp4"
+cinlink --json agent poll run_xxx
+cinlink --json agent local-tools run_xxx
 ```
 
 ## Stable JSON Contract
@@ -95,7 +95,7 @@ Successful commands print one JSON object to stdout. Failed commands also print 
 {
   "error": {
     "code": "auth_failed",
-    "message": "API key is not configured. Run `popularvideo onboarding --api-key <key>` first."
+    "message": "API key is not configured. Run `cinlink onboarding --api-key <key>` first."
   }
 }
 ```
@@ -118,7 +118,7 @@ Common error codes:
 Run the MCP server over stdio:
 
 ```powershell
-popularvideo-mcp
+cinlink-mcp
 ```
 
 Example MCP config:
@@ -126,8 +126,8 @@ Example MCP config:
 ```json
 {
   "mcpServers": {
-    "popularvideo": {
-      "command": "popularvideo-mcp",
+    "cinlink": {
+      "command": "cinlink-mcp",
       "args": [],
       "env": {
         "CINLINK_API_KEY": "ck_live_or_test_xxx"

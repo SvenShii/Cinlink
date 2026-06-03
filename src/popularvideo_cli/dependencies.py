@@ -106,7 +106,7 @@ def require_local_voice_separation_if_requested(prompt: str) -> None:
             "capability": "local_voice_separation",
             "missing": missing,
             "server_fallback": False,
-            "doctor_command": "popularvideo --json doctor",
+            "doctor_command": "cinlink --json doctor",
             "install_hints": {
                 "windows_ffmpeg": "winget install Gyan.FFmpeg",
                 "macos_ffmpeg": "brew install ffmpeg",

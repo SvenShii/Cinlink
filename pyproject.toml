@@ -1,7 +1,7 @@
 [project]
-name = "popularvideo-cli"
+name = "cinlink-cli"
 version = "0.1.0"
-description = "Standalone PopularVideo/CinLink CLI and agent tool protocol"
+description = "Standalone CinLink CLI and agent tool protocol"
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
@@ -9,9 +9,8 @@ dependencies = [
 ]
 
 [project.scripts]
-popularvideo = "popularvideo_cli.cli:main"
-addsubtitle = "popularvideo_cli.cli:main"
-popularvideo-mcp = "popularvideo_cli.mcp:main"
+cinlink = "popularvideo_cli.cli:main"
+cinlink-mcp = "popularvideo_cli.mcp:main"
 
 [build-system]
 requires = ["setuptools>=80.0"]
