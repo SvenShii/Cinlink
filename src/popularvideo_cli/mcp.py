@@ -6,11 +6,12 @@ import sys
 from typing import Any
 
 from .client import RuntimeClient
-from .config import load_settings
+from .config import Settings, load_settings, save_settings
 from .dependencies import local_dependency_report, require_local_voice_separation_if_requested
 from .errors import CliError
-from .local_tools import burn_subtitles
+from .local_tools import burn_subtitles, mix_dubbed_audio
 from .schemas import TOOL_SCHEMAS
+from .workflows import add_subtitles
 
 
 def main() -> int:
@@ -83,7 +84,20 @@ def handle_request(request: dict[str, Any]) -> dict[str, Any] | None:
 def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
     if name == "agent_run":
         require_local_voice_separation_if_requested(args["prompt"])
-    settings = load_settings(allow_missing_api_key=name == "doctor")
+    if name == "configure":
+        existing = load_settings(allow_missing_api_key=True)
+        settings = Settings(
+            api_key=args.get("api_key") or existing.api_key,
+            runtime_base=args.get("runtime_base") or existing.runtime_base,
+            billing_base=args.get("billing_base") or existing.billing_base,
+            timeout_sec=existing.timeout_sec,
+            poll_interval_sec=existing.poll_interval_sec,
+        )
+        if not settings.api_key:
+            raise CliError("invalid_input", "Pass api_key or set CINLINK_API_KEY.")
+        path = save_settings(settings)
+        return {"status": "done", "config_path": str(path), "runtime_base": settings.runtime_base, "billing_base": settings.billing_base}
+    settings = load_settings(allow_missing_api_key=name in {"doctor", "burn", "mix_dubbed_audio"})
     client = RuntimeClient(settings)
     if name == "doctor":
         payload: dict[str, Any] = {"local_dependencies": local_dependency_report()}
@@ -104,12 +118,89 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             out=_path(args.get("out")),
             timeout=args.get("timeout"),
         )
+    if name == "add_subtitles":
+        return add_subtitles(
+            client,
+            Path(args["video_path"]),
+            subtitle_path=_path(args.get("subtitle_path")),
+            source_lang=args.get("source_lang", "auto"),
+            target_lang=args.get("target_lang"),
+            bilingual=bool(args.get("bilingual", False)),
+            out=_path(args.get("out")),
+            timeout=args.get("timeout"),
+            font_size=args.get("font_size"),
+            font_name=args.get("font_name"),
+            font_color=args.get("font_color"),
+            outline_color=args.get("outline_color"),
+            outline_width=args.get("outline_width"),
+            margin_v=args.get("margin_v"),
+            position=args.get("position", "bottom"),
+            watermark_text=args.get("watermark_text"),
+            watermark_position=args.get("watermark_position", "top-right"),
+            watermark_font_size=args.get("watermark_font_size"),
+            watermark_color=args.get("watermark_color"),
+            watermark_opacity=float(args.get("watermark_opacity", 0.72)),
+            watermark_margin=int(args.get("watermark_margin", 24)),
+            watermark_image_path=_path(args.get("watermark_image_path")),
+            watermark_image_position=args.get("watermark_image_position", "top-right"),
+            watermark_image_width=args.get("watermark_image_width"),
+            watermark_image_opacity=float(args.get("watermark_image_opacity", 0.72)),
+            watermark_image_margin=int(args.get("watermark_image_margin", 24)),
+        )
+    if name == "dub":
+        return client.dub(
+            Path(args["video_path"]),
+            Path(args["subtitle_path"]),
+            reference_subtitle_path=_path(args.get("reference_subtitle_path")),
+            voice=args.get("voice"),
+            language=args.get("language", "zh"),
+            out=_path(args.get("out")),
+            timeout=args.get("timeout"),
+        )
     if name == "burn":
-        return burn_subtitles(Path(args["video_path"]), Path(args["subtitle_path"]), out=_path(args.get("out")), font_size=args.get("font_size"), position=args.get("position", "bottom"))
+        return burn_subtitles(
+            Path(args["video_path"]),
+            Path(args["subtitle_path"]),
+            out=_path(args.get("out")),
+            font_size=args.get("font_size"),
+            font_name=args.get("font_name"),
+            font_color=args.get("font_color"),
+            outline_color=args.get("outline_color"),
+            outline_width=args.get("outline_width"),
+            margin_v=args.get("margin_v"),
+            position=args.get("position", "bottom"),
+            watermark_text=args.get("watermark_text"),
+            watermark_position=args.get("watermark_position", "top-right"),
+            watermark_font_size=args.get("watermark_font_size"),
+            watermark_color=args.get("watermark_color"),
+            watermark_opacity=float(args.get("watermark_opacity", 0.72)),
+            watermark_margin=int(args.get("watermark_margin", 24)),
+            watermark_image_path=_path(args.get("watermark_image_path")),
+            watermark_image_position=args.get("watermark_image_position", "top-right"),
+            watermark_image_width=args.get("watermark_image_width"),
+            watermark_image_opacity=float(args.get("watermark_image_opacity", 0.72)),
+            watermark_image_margin=int(args.get("watermark_image_margin", 24)),
+        )
+    if name == "mix_dubbed_audio":
+        return mix_dubbed_audio(
+            Path(args["video_path"]),
+            Path(args["dubbed_audio_path"]),
+            out=_path(args.get("out")),
+            original_volume=float(args.get("original_volume", 0.65)),
+            dubbed_volume=float(args.get("dubbed_volume", 1.0)),
+        )
     if name == "summarize":
         return client.summarize(Path(args["input_path"]), out=_path(args.get("out")), max_highlights=int(args.get("max_highlights", 3)))
     if name == "shorten":
-        return client.shorten(Path(args["video_path"]), out=_path(args.get("out")), max_clips=int(args.get("max_clips", 5)), target_duration=int(args.get("target_duration", 45)))
+        return client.shorten(
+            Path(args["video_path"]),
+            out=_path(args.get("out")),
+            max_clips=int(args.get("max_clips", 5)),
+            target_duration=int(args.get("target_duration", 45)),
+            style_preset=args.get("style_preset"),
+            music_mode=args.get("music_mode", "none"),
+            music_prompt=args.get("music_prompt"),
+        )
     if name == "image":
         return client.image(args["prompt"], out=_path(args.get("out")), aspect_ratio=args.get("aspect_ratio", "1:1"), image_size=args.get("image_size", "1K"), model=args.get("model"))
     if name == "video":
@@ -121,8 +212,14 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             duration=int(args.get("duration", 5)),
             generate_audio=bool(args.get("generate_audio", True)),
             watermark=bool(args.get("watermark", False)),
+            generation_mode=args.get("generation_mode", "text"),
             first_frame_image_url=args.get("first_frame_image_url"),
             reference_image_urls=args.get("reference_image_urls") or [],
+            reference_video_urls=args.get("reference_video_urls") or [],
+            reference_audio_urls=args.get("reference_audio_urls") or [],
+            model=args.get("model"),
+            model_name=args.get("model_name"),
+            model_version=args.get("model_version"),
         )
     if name == "nlu":
         return client.nlu(

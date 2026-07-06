@@ -1,6 +1,6 @@
-# CinLinkCLI
+# CinLink Agent Skills & CLI
 
-Standalone CinLink CLI for agents. This project is intentionally separate from the desktop app repositories.
+Standalone CinLink skills and CLI for agents. This project is intentionally separate from the desktop app repositories.
 
 Product policy:
 
@@ -9,6 +9,22 @@ Product policy:
 - The hosted server does not provide Demucs voice-separation runtime.
 - If the user asks for voice separation, vocal removal, or preserving background music through local separation, the user must install local `ffmpeg`, `demucs`, and `soundfile`.
 - Agents should never install local dependencies silently. They should ask for explicit user confirmation first.
+
+## With an AI coding agent
+
+Install the CinLink skills, then read `/cinlink` first:
+
+```bash
+npx skills add SvenShii/Cinlink
+```
+
+Try prompts like:
+
+> Using `/cinlink`, add subtitles to this video.
+
+> Using `/cinlink`, dub this video into English and summarize the result.
+
+The skills follow the Hyperframes-style package layout: a router skill plus focused domain skills. Hosted work uses your CinLink API key; local-only work uses local dependencies such as `ffmpeg`.
 
 ## Windows Install
 
@@ -74,9 +90,13 @@ $env:CINLINK_BILLING_BASE="https://app.cinlink.ai"
 cinlink --json tools list
 cinlink --json tools schema transcribe
 
+cinlink --json add-subtitles "D:\videos\demo.mp4"
+cinlink --json add-subtitles "D:\videos\demo.mp4" --target-lang en
 cinlink --json transcribe "D:\videos\demo.mp4"
 cinlink --json translate "D:\videos\demo.srt" --to en
+cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --lang en
 cinlink --json burn "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt"
+cinlink --json mix-dubbed-audio "D:\videos\demo.mp4" --dubbed-audio "D:\videos\dubbed.wav"
 cinlink --json summarize "D:\videos\demo.mp4"
 cinlink --json shorten "D:\videos\demo.mp4" --target-duration 45
 cinlink --json image "a clean product poster"
@@ -139,4 +159,35 @@ Example MCP config:
 
 ## Skill Wrappers
 
-The `skills/` directory contains thin wrappers for agent systems that prefer skill/plugin files instead of MCP.
+The `skills/` directory contains installable skills for agent systems that prefer skill/plugin files instead of MCP. Read `/cinlink` first; it routes the request to focused domain skills.
+
+### Router
+
+| Skill | Use when |
+| --- | --- |
+| `/cinlink` | Read first for any CinLink media request. Capability map and intent router. |
+
+### Domain skills
+
+| Skill | Use when |
+| --- | --- |
+| `/cinlink-cli` | Install/configure CLI, store API key, run doctor, inspect tool schemas, use JSON bridge. |
+| `/cinlink-subtitles` | Transcribe, translate subtitles/media, produce bilingual subtitles, burn styled subtitles/watermarks. |
+| `/cinlink-dubbing` | Voice translation, dubbing, dubbed audio generation, local dubbed-audio mixing. |
+| `/cinlink-understanding` | Summarize videos, extract highlights, shorten long videos into plans, NLU routing. |
+| `/cinlink-generation` | Generate AI images and AI videos with hosted providers and remote references. |
+| `/cinlink-agent` | Multi-step natural-language media workflows through the hosted CinLink agent runtime. |
+
+### Compatibility wrappers
+
+- `skills/openclaw/cinlink.skill.json` exposes the same tools through the existing OpenClaw wrapper.
+- `skills/hermes/cinlink_tools.yaml` exposes the same tools for Hermes-style tool catalogs.
+- `cinlink-mcp` exposes the same tools over MCP stdio.
+
+Hosted capabilities require a CinLink API key, configured with:
+
+```powershell
+cinlink --json onboarding --api-key ck_live_or_test_xxx
+```
+
+Local-only capabilities such as subtitle burn-in and dubbed-audio mixing require local `ffmpeg`. Voice separation or background-music preservation through separated stems also requires local `demucs` and `soundfile`; agents should ask the user before installing local dependencies.

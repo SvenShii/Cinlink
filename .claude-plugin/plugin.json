@@ -1,0 +1,12 @@
+{
+  "name": "cinlink",
+  "description": "CinLink media tools for agents: subtitles, translation, dubbing, video understanding, AI image/video generation, and hosted media workflows.",
+  "version": "0.1.0",
+  "author": {
+    "name": "CinLink",
+    "url": "https://cinlink.ai"
+  },
+  "homepage": "https://cinlink.ai",
+  "repository": "https://github.com/SvenShii/Cinlink",
+  "license": "UNLICENSED"
+}

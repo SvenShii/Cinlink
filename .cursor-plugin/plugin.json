@@ -1,0 +1,27 @@
+{
+  "$schema": "https://cursor.com/schemas/cursor-plugin/plugin.json",
+  "name": "cinlink",
+  "displayName": "CinLink",
+  "version": "0.1.0",
+  "description": "CinLink media tools for agents: subtitles, translation, dubbing, video understanding, AI image/video generation, and hosted media workflows.",
+  "author": {
+    "name": "CinLink"
+  },
+  "publisher": "CinLink",
+  "homepage": "https://cinlink.ai",
+  "repository": "https://github.com/SvenShii/Cinlink",
+  "license": "UNLICENSED",
+  "logo": "assets/logo.svg",
+  "category": "developer-tools",
+  "keywords": [
+    "cinlink",
+    "video",
+    "subtitles",
+    "translation",
+    "dubbing",
+    "ai-video",
+    "agent"
+  ],
+  "tags": ["video", "subtitles", "dubbing", "generation", "workflow"],
+  "skills": "./skills/"
+}

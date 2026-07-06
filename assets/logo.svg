@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 160" role="img" aria-label="CinLink">
+  <rect width="640" height="160" rx="32" fill="#111827"/>
+  <circle cx="78" cy="80" r="34" fill="#38BDF8"/>
+  <path d="M64 58l42 22-42 22V58z" fill="#111827"/>
+  <path d="M140 54h44c30 0 50 18 50 45s-20 45-50 45h-44V54zm42 65c13 0 22-8 22-20s-9-20-22-20h-13v40h13z" fill="#F9FAFB"/>
+  <path d="M254 54h30v90h-30V54zm50 0h28l38 45V54h29v90h-26l-40-48v48h-29V54zm116 0h30v64h42v26h-72V54zm88 0h30v90h-30V54zm50 0h28l38 45V54h29v90h-26l-40-48v48h-29V54z" fill="#F9FAFB"/>
+</svg>

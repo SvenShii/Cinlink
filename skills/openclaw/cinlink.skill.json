@@ -7,6 +7,11 @@
   ],
   "tools": [
     {
+      "name": "cinlink_configure",
+      "description": "Store a CinLink API key for later hosted tool calls.",
+      "tool_arg": "configure"
+    },
+    {
       "name": "cinlink_doctor",
       "description": "Check hosted runtime health and local dependency status before local-only tasks.",
       "tool_arg": "doctor"
@@ -27,9 +32,24 @@
       "tool_arg": "translate"
     },
     {
+      "name": "cinlink_add_subtitles",
+      "description": "App-parity workflow: transcribe or translate subtitles, then burn them into a local video.",
+      "tool_arg": "add_subtitles"
+    },
+    {
+      "name": "cinlink_dub",
+      "description": "Generate dubbed speech/audio from a video and subtitle file.",
+      "tool_arg": "dub"
+    },
+    {
       "name": "cinlink_burn",
-      "description": "Burn subtitles into a local video with ffmpeg.",
+      "description": "Burn styled subtitles and optional watermarks into a local video with ffmpeg.",
       "tool_arg": "burn"
+    },
+    {
+      "name": "cinlink_mix_dubbed_audio",
+      "description": "Mix dubbed audio with the original local video audio.",
+      "tool_arg": "mix_dubbed_audio"
     },
     {
       "name": "cinlink_summarize",
@@ -50,6 +70,11 @@
       "name": "cinlink_video",
       "description": "Generate a video from a prompt.",
       "tool_arg": "video"
+    },
+    {
+      "name": "cinlink_nlu",
+      "description": "Route a natural-language media task to a CinLink action.",
+      "tool_arg": "nlu"
     }
   ]
 }

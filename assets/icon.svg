@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="CinLink">
+  <rect width="128" height="128" rx="28" fill="#111827"/>
+  <circle cx="64" cy="64" r="38" fill="#38BDF8"/>
+  <path d="M52 40l42 24-42 24V40z" fill="#111827"/>
+</svg>

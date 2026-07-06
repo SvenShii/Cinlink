@@ -1,6 +1,12 @@
 name: cinlink
 description: CinLink tools exposed through the standalone CLI.
 tools:
+  - name: cinlink_configure
+    command: cinlink --json onboarding --api-key "{api_key}"
+    args_schema:
+      api_key: string
+      runtime_base: string
+      billing_base: string
   - name: cinlink_doctor
     command: cinlink --json doctor
     args_schema: {}
@@ -26,12 +32,106 @@ tools:
       bilingual: boolean
       delivery: string
       out: string
+  - name: cinlink_add_subtitles
+    command: cinlink --json add-subtitles "{video_path}"
+    args_schema:
+      video_path: string
+      subtitle_path: string
+      source_lang: string
+      target_lang: string
+      bilingual: boolean
+      out: string
+      font_size: integer
+      font_name: string
+      font_color: string
+      outline_color: string
+      outline_width: number
+      margin_v: integer
+      position: string
+      watermark_text: string
+      watermark_image_path: string
+  - name: cinlink_dub
+    command: cinlink --json dub "{video_path}" --subtitle "{subtitle_path}"
+    args_schema:
+      video_path: string
+      subtitle_path: string
+      reference_subtitle_path: string
+      voice: string
+      language: string
+      out: string
   - name: cinlink_burn
     command: cinlink --json burn "{video_path}" --subtitle "{subtitle_path}"
     args_schema:
       video_path: string
       subtitle_path: string
       out: string
+      font_size: integer
+      font_name: string
+      font_color: string
+      outline_color: string
+      outline_width: number
+      margin_v: integer
+      position: string
+      watermark_text: string
+      watermark_image_path: string
+  - name: cinlink_mix_dubbed_audio
+    command: cinlink --json mix-dubbed-audio "{video_path}" --dubbed-audio "{dubbed_audio_path}"
+    args_schema:
+      video_path: string
+      dubbed_audio_path: string
+      out: string
+      original_volume: number
+      dubbed_volume: number
+  - name: cinlink_summarize
+    command: cinlink --json summarize "{input_path}"
+    args_schema:
+      input_path: string
+      max_highlights: integer
+      out: string
+  - name: cinlink_shorten
+    command: cinlink --json shorten "{video_path}"
+    args_schema:
+      video_path: string
+      max_clips: integer
+      target_duration: integer
+      style_preset: string
+      music_mode: string
+      music_prompt: string
+      out: string
+  - name: cinlink_image
+    command: cinlink --json image "{prompt}"
+    args_schema:
+      prompt: string
+      aspect_ratio: string
+      image_size: string
+      model: string
+      out: string
+  - name: cinlink_video
+    command: cinlink --json video "{prompt}"
+    args_schema:
+      prompt: string
+      aspect_ratio: string
+      resolution: string
+      duration: integer
+      generate_audio: boolean
+      watermark: boolean
+      generation_mode: string
+      first_frame_image_url: string
+      reference_image_urls: string[]
+      reference_video_urls: string[]
+      reference_audio_urls: string[]
+      model: string
+      model_name: string
+      model_version: string
+      out: string
+  - name: cinlink_nlu
+    command: cinlink --json nlu "{prompt}"
+    args_schema:
+      prompt: string
+      has_video: boolean
+      has_subtitle: boolean
+      pending_target_language: string
+      context_files: string[]
   - name: cinlink_mcp
     command: cinlink-mcp
     transport: stdio

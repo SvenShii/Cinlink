@@ -1,0 +1,42 @@
+{
+  "name": "cinlink",
+  "version": "0.1.0",
+  "description": "CinLink media tools for agents: subtitles, translation, dubbing, video understanding, AI image/video generation, and hosted media workflows.",
+  "author": {
+    "name": "CinLink",
+    "url": "https://cinlink.ai"
+  },
+  "homepage": "https://cinlink.ai",
+  "repository": "https://github.com/SvenShii/Cinlink",
+  "license": "UNLICENSED",
+  "keywords": [
+    "cinlink",
+    "video",
+    "subtitles",
+    "captions",
+    "translation",
+    "dubbing",
+    "summarization",
+    "ai-video",
+    "ai-image",
+    "agent"
+  ],
+  "skills": "./skills/",
+  "interface": {
+    "displayName": "CinLink",
+    "shortDescription": "Video, subtitles, dubbing, and AI media",
+    "longDescription": "Use CinLink from agents through focused skills and a hosted-first CLI. Configure a CinLink API key, transcribe and translate media, burn styled subtitles locally, create dubbing and voice translation, summarize and shorten videos, generate AI images and videos, and run hosted multi-step media workflows.",
+    "developerName": "CinLink",
+    "category": "Creativity",
+    "capabilities": ["Read", "Write"],
+    "websiteURL": "https://cinlink.ai",
+    "defaultPrompt": [
+      "Transcribe this video and create subtitles",
+      "Dub this video into English",
+      "Summarize this long video and make a highlight plan"
+    ],
+    "brandColor": "#111827",
+    "composerIcon": "./assets/icon.svg",
+    "logo": "./assets/logo.svg"
+  }
+}
