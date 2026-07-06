@@ -30,6 +30,8 @@ OpenClaw / Hermes / 其他 agent
 
 ## 2. 安装
 
+如果是 agent 第一次安装或重新连接，请优先让 agent 读取仓库根目录的 `install.md`。安装阶段就应该检查 API key：如果没有配置，向用户要一次 CinLink API key，然后运行 `cinlink --json onboarding --api-key <key>` 写入用户级 CLI 配置。
+
 打开 PowerShell：
 
 ```powershell
@@ -49,12 +51,22 @@ cinlink-mcp
 
 ??????? `cinlink`?MCP ??? `cinlink-mcp`?
 
+Windows 一键安装脚本如果没有传 `-ApiKey`，并且环境变量里也没有 `CINLINK_API_KEY`，会在安装阶段提示输入一次 API key。也可以跳过提示：
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -SkipApiKeyPrompt
+```
+
 ## 3. 配置 API Key
+
+安装时推荐直接写入 CLI 用户配置。这样用户只安装 skills、没有仓库目录时也能用：
 
 ```powershell
 cinlink --json onboarding --api-key ck_live_or_test_xxx
 cinlink --json doctor
 ```
+
+不要在日志或最终回复里打印 key，也不要把 key 写入 `SKILL.md` 或任何可提交文件。
 
 也可以不写配置文件，直接给 agent 配环境变量：
 

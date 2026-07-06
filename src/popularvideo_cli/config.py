@@ -26,7 +26,7 @@ class Settings:
     @property
     def auth_headers(self) -> dict[str, str]:
         if not self.api_key:
-            raise CliError("auth_failed", "API key is not configured. Run `cinlink onboarding --api-key <key>` first.")
+            raise CliError("auth_failed", "API key is not configured. Run `cinlink onboarding --api-key <key>` first or set CINLINK_API_KEY.")
         return {"X-API-Key": self.api_key, "Authorization": f"Bearer {self.api_key}"}
 
 
@@ -80,7 +80,7 @@ def load_settings(allow_missing_api_key: bool = False) -> Settings:
         poll_interval_sec=float(data.get("poll_interval_sec") or 2.0),
     )
     if not settings.api_key and not allow_missing_api_key:
-        raise CliError("auth_failed", "API key is not configured. Run `cinlink onboarding --api-key <key>` first.")
+        raise CliError("auth_failed", "API key is not configured. Run `cinlink onboarding --api-key <key>` first or set CINLINK_API_KEY.")
     return settings
 
 

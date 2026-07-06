@@ -18,6 +18,8 @@ Install the CinLink skills, then read `/cinlink` first:
 npx skills add SvenShii/Cinlink
 ```
 
+For first-time installs or reconnects, agents should read `install.md`. It follows the video-use style install contract: ask for the user's CinLink API key up front if it is not already configured, save it with `cinlink --json onboarding`, and never print or commit the key.
+
 Try prompts like:
 
 > Using `/cinlink`, add subtitles to this video.
@@ -52,9 +54,11 @@ The installer:
 - Finds Python's Scripts directory.
 - Adds that directory to the user-level `PATH`.
 - Updates the current PowerShell session `PATH`.
+- Prompts for a CinLink API key during install when none is configured, unless `-SkipApiKeyPrompt` is passed.
+- Writes the provided key to the CLI user config through onboarding.
 - Runs `cinlink --json doctor`.
 
-If you pass an API key, the installer also writes CLI config:
+If you pass an API key, the installer uses it without prompting:
 
 ```powershell
 powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -ApiKey "ck_live_or_test_xxx"
@@ -189,5 +193,7 @@ Hosted capabilities require a CinLink API key, configured with:
 ```powershell
 cinlink --json onboarding --api-key ck_live_or_test_xxx
 ```
+
+For agent installs, prefer the install-time flow in `install.md`: collect the key once, run `cinlink --json onboarding --api-key <key>`, then use `cinlink --json doctor` to confirm `has_api_key: true`.
 
 Local-only capabilities such as subtitle burn-in and dubbed-audio mixing require local `ffmpeg`. Voice separation or background-music preservation through separated stems also requires local `demucs` and `soundfile`; agents should ask the user before installing local dependencies.

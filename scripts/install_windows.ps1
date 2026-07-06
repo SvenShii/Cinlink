@@ -4,7 +4,8 @@ param(
   [string]$RuntimeBase = "",
   [string]$BillingBase = "",
   [switch]$Editable,
-  [switch]$NoPathUpdate
+  [switch]$NoPathUpdate,
+  [switch]$SkipApiKeyPrompt
 )
 
 $ErrorActionPreference = "Stop"
@@ -33,6 +34,19 @@ function Invoke-Python {
     $prefixArgs = $PythonCommand[1..($PythonCommand.Length - 1)]
   }
   & $PythonCommand[0] @prefixArgs @Arguments
+}
+
+function ConvertFrom-SecureText {
+  param([SecureString]$SecureText)
+  if (-not $SecureText -or $SecureText.Length -eq 0) {
+    return ""
+  }
+  $bstr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($SecureText)
+  try {
+    return [Runtime.InteropServices.Marshal]::PtrToStringBSTR($bstr)
+  } finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($bstr)
+  }
 }
 
 function Add-UserPath {
@@ -84,6 +98,12 @@ if (-not $NoPathUpdate) {
   Add-UserPath $scriptsDir
 } else {
   Write-Step "Skipping PATH update. Scripts directory: $scriptsDir"
+}
+
+if (-not $ApiKey -and -not $env:CINLINK_API_KEY -and -not $SkipApiKeyPrompt) {
+  Write-Step "CinLink hosted workflows require an API key."
+  $secureKey = Read-Host "Paste CinLink API key now, or press Enter to skip" -AsSecureString
+  $ApiKey = ConvertFrom-SecureText $secureKey
 }
 
 if ($ApiKey) {

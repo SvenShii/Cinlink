@@ -9,6 +9,8 @@ Everything runs through the standalone `cinlink` CLI. Hosted work uses `https://
 
 ## Install
 
+For first-time install or reconnect, read the repo-root `install.md` when it is available. It is the install-time contract: install the CLI, register the skills if needed, ask for the CinLink API key once if missing, then save it with onboarding.
+
 ```bash
 pip install "git+https://github.com/SvenShii/Cinlink.git"
 cinlink --json doctor
@@ -22,7 +24,9 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1
 
 ## Configure API Key
 
-Ask the user for their CinLink API key when a hosted task returns `auth_failed` or `doctor` says no API key is configured.
+Hosted work should have a CinLink API key configured during install. Check with `cinlink --json doctor`. Ask the user for their key only when `doctor` says no API key is configured or a hosted task returns `auth_failed`.
+
+Use onboarding as the primary storage path. It writes user-level config, so it works even when the user installed only the skills and has no repo checkout:
 
 ```bash
 cinlink --json onboarding --api-key <cinlink_api_key>
@@ -36,7 +40,7 @@ export CINLINK_RUNTIME_BASE="https://runtime.cinlink.ai"
 export CINLINK_BILLING_BASE="https://app.cinlink.ai"
 ```
 
-Never print the key back to the user.
+Credential lookup order is: process environment, then the CLI user config written by `onboarding`. Never print the key back to the user or write it into tracked files.
 
 ## Diagnostics
 

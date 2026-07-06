@@ -65,7 +65,9 @@ Route to `/cinlink-generation` for:
 
 ## API Key Rule
 
-Hosted capabilities use the user's CinLink API key. Before the first hosted call, read `/cinlink-cli` and configure one of:
+Hosted capabilities use the user's CinLink API key. First-time installs should read repo-root `install.md` when available, ask for the key up front if missing, and run `cinlink --json onboarding --api-key <key>`. During normal use, before the first hosted call, read `/cinlink-cli` and verify `cinlink --json doctor`.
+
+Supported credential sources:
 
 - `cinlink --json onboarding --api-key <key>`
 - `CINLINK_API_KEY=<key>`
