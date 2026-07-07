@@ -235,15 +235,30 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             conversation_id=args.get("conversation_id"),
             context_files=[Path(item) for item in args.get("context_file", [])],
             mode=args.get("mode", "execute"),
+            task_intent=args.get("task_intent"),
+            task_parameters=_string_dict(args.get("task_parameters")),
+            conversation_state=_string_dict(args.get("conversation_state")),
         )
         if args.get("wait") and created.get("run_id"):
-            return client.wait_for_agent_run(str(created["run_id"]))
+            return client.wait_for_agent_run(str(created["run_id"]), timeout=_float_or_none(args.get("timeout")))
         return created
     raise CliError("invalid_input", f"Unsupported tool: {name}")
 
 
 def _path(value: str | None) -> Path | None:
     return Path(value) if value else None
+
+
+def _string_dict(value: Any) -> dict[str, str]:
+    if not isinstance(value, dict):
+        return {}
+    return {str(key): str(item) for key, item in value.items() if item is not None}
+
+
+def _float_or_none(value: Any) -> float | None:
+    if value is None:
+        return None
+    return float(value)
 
 
 def _error_response(request_id: Any, code: str, message: str, details: dict[str, Any] | None = None) -> dict[str, Any]:

@@ -212,6 +212,9 @@ class RuntimeClient:
         conversation_id: str | None = None,
         context_files: list[Path] | None = None,
         mode: str = "execute",
+        task_intent: str | None = None,
+        task_parameters: dict[str, str] | None = None,
+        conversation_state: dict[str, str] | None = None,
         client_capabilities: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
         request_files = [_context_file_payload(path) for path in (context_files or [])]
@@ -222,6 +225,9 @@ class RuntimeClient:
                 "conversation_id": conversation_id or f"cli-{uuid4()}",
                 "prompt": prompt,
                 "context_files": request_files,
+                "task_intent": task_intent,
+                "task_parameters": task_parameters or {},
+                "conversation_state": conversation_state or {},
                 "client_capabilities": client_capabilities or default_client_capabilities(),
                 "mode": mode,
             },

@@ -114,7 +114,15 @@ Routes a natural-language media task into an action and slots.
 cinlink --json agent run "<prompt>" --context-file <path> --mode execute --wait
 ```
 
-Use for broad, multi-step media workflows. Also available: `agent poll`, `agent local-tools`, `agent report-tool-result`.
+Use for broad, multi-step media workflows. When the app surface action is known, pass it explicitly:
+
+```bash
+cinlink --json agent run "Add English subtitles and return the subtitled video." --context-file <path> --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --mode execute --wait
+```
+
+Use repeated `--task-param KEY=VALUE` or `--task-parameters-json '{"key":"value"}' for explicit slots such as `output_delivery`, `target_language`, `source_language`, `subtitle_language`, and `translation_mode`. Current prompt language and task parameters override historical conversation state.
+
+Also available: `agent poll`, `agent local-tools`, `agent report-tool-result`.
 
 ## Error Codes
 

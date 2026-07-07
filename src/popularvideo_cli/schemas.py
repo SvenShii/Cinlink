@@ -277,7 +277,22 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "conversation_id": {"type": "string"},
                 "context_file": {"type": "array", "items": {"type": "string"}},
                 "mode": {"type": "string", "enum": ["plan", "execute"], "default": "execute"},
+                "task_intent": {
+                    "type": "string",
+                    "description": "High-priority app-surface intent, for example add_subtitles, translate_and_burn_subtitles, dub_video, summarize_video, shorten_video, generate_image, or generate_video.",
+                },
+                "task_parameters": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"},
+                    "description": "Explicit app slot values such as output_delivery=burned_video, target_language=en, source_language=auto, subtitle_language=en, or translation_mode=subtitle.",
+                },
+                "conversation_state": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"},
+                    "description": "Optional persisted agent state. Current prompt and task_parameters override historical defaults.",
+                },
                 "wait": {"type": "boolean", "default": False},
+                "timeout": {"type": "number", "default": 1800},
             },
         },
         "output_schema": {"type": "object"},

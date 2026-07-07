@@ -193,6 +193,10 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--conversation-id")
     run.add_argument("--context-file", action="append", default=[])
     run.add_argument("--mode", choices=["plan", "execute"], default="execute")
+    run.add_argument("--task-intent")
+    run.add_argument("--task-param", action="append", default=[], metavar="KEY=VALUE")
+    run.add_argument("--task-parameters-json", default="{}")
+    run.add_argument("--conversation-state-json", default="{}")
     run.add_argument("--wait", action="store_true")
     run.add_argument("--timeout", type=float)
     poll = agent_subparsers.add_parser("poll")
@@ -396,11 +400,17 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
 
 def run_agent_command(args: argparse.Namespace, client: RuntimeClient) -> dict[str, Any]:
     if args.agent_command == "run":
+        task_parameters = _parse_string_dict(args.task_parameters_json, "--task-parameters-json")
+        task_parameters.update(_parse_key_value_pairs(args.task_param, "--task-param"))
+        conversation_state = _parse_string_dict(args.conversation_state_json, "--conversation-state-json")
         created = client.create_agent_run(
             args.prompt,
             conversation_id=args.conversation_id,
             context_files=[Path(item) for item in args.context_file],
             mode=args.mode,
+            task_intent=args.task_intent,
+            task_parameters=task_parameters,
+            conversation_state=conversation_state,
         )
         if args.wait and created.get("run_id"):
             return client.wait_for_agent_run(str(created["run_id"]), timeout=args.timeout)
@@ -439,6 +449,29 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     if not isinstance(payload, dict):
         raise CliError("invalid_input", "--metadata-json must be a JSON object.")
     return payload
+
+
+def _parse_string_dict(text: str, flag: str) -> dict[str, str]:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise CliError("invalid_input", f"{flag} must be a JSON object.") from exc
+    if not isinstance(payload, dict):
+        raise CliError("invalid_input", f"{flag} must be a JSON object.")
+    return {str(key): str(value) for key, value in payload.items() if value is not None}
+
+
+def _parse_key_value_pairs(values: list[str], flag: str) -> dict[str, str]:
+    parsed: dict[str, str] = {}
+    for item in values:
+        if "=" not in item:
+            raise CliError("invalid_input", f"{flag} must be formatted as KEY=VALUE.")
+        key, value = item.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise CliError("invalid_input", f"{flag} must include a non-empty key.")
+        parsed[key] = value
+    return parsed
 
 
 if __name__ == "__main__":

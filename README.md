@@ -107,6 +107,7 @@ cinlink --json image "a clean product poster"
 cinlink --json video "a 5 second cinematic product reveal"
 
 cinlink --json agent run "Summarize this video into five selling points" --context-file "D:\videos\demo.mp4"
+cinlink --json agent run "Add English subtitles and return the subtitled video" --context-file "D:\videos\demo.mp4" --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait
 cinlink --json agent poll run_xxx
 cinlink --json agent local-tools run_xxx
 ```

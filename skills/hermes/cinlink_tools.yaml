@@ -16,7 +16,11 @@ tools:
       prompt: string
       context_file: string[]
       mode: string
+      task_intent: string
+      task_parameters: object
+      conversation_state: object
       wait: boolean
+      timeout: number
   - name: cinlink_transcribe
     command: cinlink --json transcribe "{input_path}"
     args_schema:

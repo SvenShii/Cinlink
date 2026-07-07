@@ -108,6 +108,7 @@ cinlink --json nlu "把这个视频翻译成英文字幕" --has-video
 
 ```powershell
 cinlink --json agent run "把这个视频总结成 5 条卖点" --context-file "D:\videos\demo.mp4"
+cinlink --json agent run "给这个视频加英文字幕，并输出带字幕视频" --context-file "D:\videos\demo.mp4" --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait
 ```
 
 如果返回：
@@ -149,6 +150,7 @@ cinlink --json shorten "D:\videos\demo.mp4" --target-duration 45
 cinlink --json image "小红书风格的美食封面图"
 cinlink --json video "5 秒产品展示视频，干净背景"
 cinlink --json agent run "把这个视频剪成 3 个 15 秒短视频" --context-file "D:\videos\demo.mp4"
+cinlink --json agent run "给这个视频加英文字幕，并输出带字幕视频" --context-file "D:\videos\demo.mp4" --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait
 ```
 
 如果 OpenClaw 支持 skill manifest，可以参考：
@@ -171,6 +173,12 @@ Hermes 有两种接法。
 
 ```powershell
 cinlink --json agent run "{prompt}" --context-file "{file}"
+```
+
+如果调用方已经知道是 app 里的明确任务，可以追加：
+
+```powershell
+--task-intent add_subtitles --task-param output_delivery=burned_video
 ```
 
 模板文件：

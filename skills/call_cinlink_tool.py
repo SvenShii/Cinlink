@@ -205,6 +205,11 @@ def build_command(tool: str, args: dict) -> list[str]:
         for path in args.get("context_file", []):
             command.extend(["--context-file", path])
         command.extend(optional("--conversation-id", args.get("conversation_id")))
+        command.extend(optional("--task-intent", args.get("task_intent")))
+        if args.get("task_parameters"):
+            command.extend(["--task-parameters-json", json.dumps(args["task_parameters"], ensure_ascii=False)])
+        if args.get("conversation_state"):
+            command.extend(["--conversation-state-json", json.dumps(args["conversation_state"], ensure_ascii=False)])
         if args.get("wait"):
             command.append("--wait")
         command.extend(optional("--timeout", args.get("timeout")))
