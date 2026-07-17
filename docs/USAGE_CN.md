@@ -32,6 +32,15 @@ OpenClaw / Hermes / 其他 agent
 
 如果是 agent 第一次安装或重新连接，请优先让 agent 读取仓库根目录的 `install.md`。安装阶段就应该检查 API key：如果没有配置，向用户要一次 CinLink API key，然后运行 `cinlink --json onboarding --api-key <key>` 写入用户级 CLI 配置。
 
+推荐像 `video-use` 一样，把下面这段直接粘给 Claude Code、Codex、Hermes、OpenClaw 或其他有 shell 权限的 agent：
+
+```text
+帮我设置 https://github.com/SvenShii/Cinlink。
+先读取 install.md，安装 CinLink CLI，把 skills 注册到你当前所在的 agent，运行 setup-local-deps 来处理 ffmpeg 和可选的人声分离依赖，然后设置我的 CinLink API key；需要 key 时问我粘贴。请用 `cinlink --json onboarding --api-key <key>` 保存 key，不要把 key 打印出来。安装完成后不要主动跑转写、配音、图片生成或视频生成这种会消耗额度的任务，只运行 `cinlink --json doctor` 和 `cinlink --json tools list` 这类轻量检查，然后告诉我已经准备好，等待我的第一个媒体任务。
+```
+
+注意：`npx skills add SvenShii/Cinlink` 只会注册 skill 文件，不会自动执行 `install.md`，也不会自动安装 ffmpeg、安装 CLI 或弹出 API key 输入。第一次完整安装要用上面的 setup prompt 让 agent 继续执行 onboarding。
+
 打开 PowerShell：
 
 ```powershell

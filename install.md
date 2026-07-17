@@ -7,6 +7,8 @@ description: Install CinLink skills and CLI into the current agent, register the
 
 Use this file only for first-time install or reconnect. For daily media work, read `skills/cinlink/SKILL.md` first.
 
+This file is meant to be executed by an agent after the user pastes the setup prompt from `README.md`. Running `npx skills add SvenShii/Cinlink` by itself only registers skill files; it does not execute this install contract, install dependencies, or prompt for the API key.
+
 ## What you're doing
 
 You're setting up CinLink for an agent so the user can run hosted media workflows without being asked for an API key in the middle of a task.

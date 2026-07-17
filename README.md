@@ -12,13 +12,26 @@ Product policy:
 
 ## With an AI coding agent
 
-Install the CinLink skills, then read `/cinlink` first:
+### Setup prompt
+
+Paste this into Claude Code, Codex, Hermes, OpenClaw, or any agent with shell access:
+
+```text
+Set up https://github.com/SvenShii/Cinlink for me.
+Read install.md first to install the CinLink CLI, register the skills with whichever agent you're running under, run setup-local-deps so ffmpeg and optional local voice-separation dependencies are handled, and set up my CinLink API key — ask me to paste it when you need it. Save the key with `cinlink --json onboarding --api-key <key>` and never print it back. After install, don't run hosted transcription, dubbing, image, or video generation on your own — just run cheap checks like `cinlink --json doctor` and `cinlink --json tools list`, tell me it's ready, and wait for my first media task.
+```
+
+The agent handles the clone, CLI install, local dependency prompt, skill registration, and one-time CinLink API key onboarding.
+
+If you only want to register the skills without full onboarding, run:
 
 ```bash
 npx skills add SvenShii/Cinlink
 ```
 
-For first-time installs or reconnects, agents should read `install.md`. It follows the video-use style install contract: ask for the user's CinLink API key up front if it is not already configured, save it with `cinlink --json onboarding`, and never print or commit the key.
+`npx skills add` only installs the skill files. It does not execute `install.md`, install `ffmpeg`, install the `cinlink` CLI, or prompt for an API key. For first-time installs or reconnects, use the setup prompt above.
+
+The install contract in `install.md` asks for the user's CinLink API key up front if it is not already configured, saves it with `cinlink --json onboarding`, and never prints or commits the key.
 
 During install, the agent should also run:
 
