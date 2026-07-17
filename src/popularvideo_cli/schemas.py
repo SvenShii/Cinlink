@@ -39,6 +39,20 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             },
         },
     },
+    "setup_local_deps": {
+        "description": "Check and optionally install CinLink local dependencies. Prompts or requires explicit yes before installing ffmpeg; optional voice-separation dependencies install only when requested.",
+        "input_schema": {
+            "type": "object",
+            "properties": {
+                "yes": {"type": "boolean", "default": False, "description": "Install recommended dependencies without prompting."},
+                "dry_run": {"type": "boolean", "default": False, "description": "Return the commands that would run without installing anything."},
+                "skip_ffmpeg": {"type": "boolean", "default": False},
+                "with_voice_separation": {"type": "boolean", "default": False, "description": "Also install optional demucs and soundfile for local voice separation/background preservation."},
+                "skip_voice_separation": {"type": "boolean", "default": False},
+            },
+        },
+        "output_schema": {"type": "object"},
+    },
     "transcribe": {
         "description": "Transcribe a local video or audio file into subtitles.",
         "input_schema": {

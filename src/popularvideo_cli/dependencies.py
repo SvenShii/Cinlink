@@ -49,7 +49,9 @@ def local_dependency_report() -> dict[str, Any]:
             "used_for": ["subtitle_burn", "local_audio_extract", "local_mix", "local_voice_separation"],
             "install_hint": {
                 "windows": "winget install Gyan.FFmpeg",
-                "macos": "brew install ffmpeg-full, or use the CinLink app-managed ffmpeg bundle",
+                "macos": "brew install ffmpeg, or use the CinLink app-managed ffmpeg bundle",
+                "linux": "Use the distro package manager, for example sudo apt-get install ffmpeg",
+                "cinlink": "cinlink setup-local-deps",
             },
         },
         "demucs": {

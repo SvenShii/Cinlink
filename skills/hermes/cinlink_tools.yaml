@@ -10,6 +10,14 @@ tools:
   - name: cinlink_doctor
     command: cinlink --json doctor
     args_schema: {}
+  - name: cinlink_setup_local_deps
+    command: cinlink --json setup-local-deps
+    args_schema:
+      yes: boolean
+      dry_run: boolean
+      skip_ffmpeg: boolean
+      with_voice_separation: boolean
+      skip_voice_separation: boolean
   - name: cinlink_agent_run
     command: cinlink --json agent run "{prompt}"
     args_schema:

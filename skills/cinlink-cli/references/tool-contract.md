@@ -20,6 +20,16 @@ cinlink --json doctor
 
 Reports API-key presence, runtime health, and local dependency status.
 
+### setup-local-deps
+
+```bash
+cinlink setup-local-deps
+cinlink --json setup-local-deps --dry-run --with-voice-separation
+cinlink setup-local-deps --yes
+```
+
+Prompts the user to install local dependencies. `ffmpeg` is recommended for subtitle burn-in, local audio extraction/mixing, and local media inspection. `demucs` plus `soundfile` are optional and are only needed for local voice separation/background preservation. Do not run with `--yes` until the user has confirmed.
+
 ### transcribe
 
 ```bash

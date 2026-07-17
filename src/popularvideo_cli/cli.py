@@ -10,6 +10,7 @@ from .client import RuntimeClient
 from .config import Settings, load_settings, save_settings
 from .dependencies import local_dependency_report, require_local_voice_separation_if_requested
 from .errors import CliError
+from .local_setup import setup_local_dependencies
 from .local_tools import burn_subtitles, mix_dubbed_audio
 from .schemas import TOOL_SCHEMAS, list_tools
 from .workflows import add_subtitles
@@ -36,6 +37,13 @@ def build_parser() -> argparse.ArgumentParser:
     onboarding.add_argument("--billing-base", default=None)
 
     doctor = subparsers.add_parser("doctor")
+
+    setup_deps = subparsers.add_parser("setup-local-deps", aliases=["install-local-deps"])
+    setup_deps.add_argument("--yes", action="store_true", help="Install recommended local dependencies without prompting.")
+    setup_deps.add_argument("--dry-run", action="store_true", help="Show what would be installed without running package-manager commands.")
+    setup_deps.add_argument("--skip-ffmpeg", action="store_true")
+    setup_deps.add_argument("--with-voice-separation", action="store_true", help="Also install optional Demucs/soundfile voice-separation dependencies.")
+    setup_deps.add_argument("--skip-voice-separation", action="store_true")
 
     tools = subparsers.add_parser("tools")
     tool_subparsers = tools.add_subparsers(dest="tools_command", required=True)
@@ -223,6 +231,7 @@ def main(argv: list[str] | None = None) -> int:
     raw_argv = [item for item in raw_argv if item != "--json"]
     args = parser.parse_args(raw_argv)
     json_output = bool(json_flag or args.json or args.command in {"tools", "agent"})
+    setattr(args, "_json_output", json_output)
     try:
         payload = run_command(args)
         emit(payload, json_output=json_output)
@@ -266,6 +275,16 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         except CliError as exc:
             payload["runtime_health"] = exc.to_payload()["error"]
         return payload
+
+    if args.command in {"setup-local-deps", "install-local-deps"}:
+        return setup_local_dependencies(
+            assume_yes=args.yes,
+            dry_run=args.dry_run,
+            skip_ffmpeg=args.skip_ffmpeg,
+            with_voice_separation=args.with_voice_separation,
+            skip_voice_separation=args.skip_voice_separation,
+            interactive=not bool(getattr(args, "_json_output", False)),
+        )
 
     if args.command == "tools":
         if args.tools_command == "list":

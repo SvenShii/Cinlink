@@ -16,6 +16,20 @@ pip install "git+https://github.com/SvenShii/Cinlink.git"
 cinlink --json doctor
 ```
 
+After the CLI is installed, run the local dependency setup:
+
+```bash
+cinlink setup-local-deps
+```
+
+This checks local `ffmpeg` for subtitle burn-in/audio work and prompts before using a platform package manager to install it. It also offers optional `demucs` and `soundfile` for local voice separation/background preservation. For non-interactive agents, first show a dry run:
+
+```bash
+cinlink --json setup-local-deps --dry-run --with-voice-separation
+```
+
+Only run `cinlink setup-local-deps --yes` or `cinlink setup-local-deps --yes --with-voice-separation` after the user explicitly confirms.
+
 Windows users can also run:
 
 ```powershell
@@ -78,6 +92,7 @@ MCP exposes the same tool names as `cinlink --json tools list`.
 cinlink --json tools list
 cinlink --json tools schema transcribe
 cinlink --json tools schema dub
+cinlink --json tools schema setup_local_deps
 ```
 
 Use JSON mode for all agent/automation calls.

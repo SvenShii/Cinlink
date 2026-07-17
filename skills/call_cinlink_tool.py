@@ -13,6 +13,7 @@ def main() -> int:
         choices=[
             "configure",
             "doctor",
+            "setup_local_deps",
             "transcribe",
             "translate",
             "add_subtitles",
@@ -52,6 +53,19 @@ def build_command(tool: str, args: dict) -> list[str]:
         return base + ["onboarding", "--api-key", args["api_key"], *optional("--runtime-base", args.get("runtime_base")), *optional("--billing-base", args.get("billing_base"))]
     if tool == "doctor":
         return base + ["doctor"]
+    if tool == "setup_local_deps":
+        command = base + ["setup-local-deps"]
+        if args.get("yes"):
+            command.append("--yes")
+        if args.get("dry_run"):
+            command.append("--dry-run")
+        if args.get("skip_ffmpeg"):
+            command.append("--skip-ffmpeg")
+        if args.get("with_voice_separation"):
+            command.append("--with-voice-separation")
+        if args.get("skip_voice_separation"):
+            command.append("--skip-voice-separation")
+        return command
     if tool == "transcribe":
         return base + ["transcribe", args["input_path"], "--lang", args.get("lang", "auto"), *optional("--out", args.get("out")), *optional("--timeout", args.get("timeout"))]
     if tool == "translate":

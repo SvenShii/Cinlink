@@ -5,7 +5,10 @@ param(
   [string]$BillingBase = "",
   [switch]$Editable,
   [switch]$NoPathUpdate,
-  [switch]$SkipApiKeyPrompt
+  [switch]$SkipApiKeyPrompt,
+  [switch]$InstallLocalDependencies,
+  [switch]$InstallVoiceSeparationDependencies,
+  [switch]$SkipLocalDependencyPrompt
 )
 
 $ErrorActionPreference = "Stop"
@@ -98,6 +101,20 @@ if (-not $NoPathUpdate) {
   Add-UserPath $scriptsDir
 } else {
   Write-Step "Skipping PATH update. Scripts directory: $scriptsDir"
+}
+
+if ($SkipLocalDependencyPrompt) {
+  Write-Step "Skipping local dependency setup. Run 'cinlink setup-local-deps' later before subtitle burn-in or local audio work."
+} else {
+  $setupArgs = @("setup-local-deps")
+  if ($InstallLocalDependencies) {
+    $setupArgs += "--yes"
+  }
+  if ($InstallVoiceSeparationDependencies) {
+    $setupArgs += "--with-voice-separation"
+  }
+  Write-Step "Checking local dependencies such as ffmpeg"
+  & (Join-Path $scriptsDir "cinlink.exe") @setupArgs
 }
 
 if (-not $ApiKey -and -not $env:CINLINK_API_KEY -and -not $SkipApiKeyPrompt) {

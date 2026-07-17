@@ -9,6 +9,7 @@ from .client import RuntimeClient
 from .config import Settings, load_settings, save_settings
 from .dependencies import local_dependency_report, require_local_voice_separation_if_requested
 from .errors import CliError
+from .local_setup import setup_local_dependencies
 from .local_tools import burn_subtitles, mix_dubbed_audio
 from .schemas import TOOL_SCHEMAS
 from .workflows import add_subtitles
@@ -97,6 +98,15 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             raise CliError("invalid_input", "Pass api_key or set CINLINK_API_KEY.")
         path = save_settings(settings)
         return {"status": "done", "config_path": str(path), "runtime_base": settings.runtime_base, "billing_base": settings.billing_base}
+    if name == "setup_local_deps":
+        return setup_local_dependencies(
+            assume_yes=bool(args.get("yes", False)),
+            dry_run=bool(args.get("dry_run", False)),
+            skip_ffmpeg=bool(args.get("skip_ffmpeg", False)),
+            with_voice_separation=bool(args.get("with_voice_separation", False)),
+            skip_voice_separation=bool(args.get("skip_voice_separation", False)),
+            interactive=False,
+        )
     settings = load_settings(allow_missing_api_key=name in {"doctor", "burn", "mix_dubbed_audio"})
     client = RuntimeClient(settings)
     if name == "doctor":

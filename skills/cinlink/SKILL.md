@@ -81,4 +81,6 @@ CinLink is hosted-first. Provider credentials stay on the server. Local dependen
 - `ffmpeg`: subtitle burn, audio mix, local media probing
 - `demucs` + `soundfile`: local voice separation/background preservation
 
+During install or reconnect, run `cinlink setup-local-deps` so the user is prompted to install local `ffmpeg` and optionally `demucs`/`soundfile`. In non-interactive contexts, show `cinlink --json setup-local-deps --dry-run --with-voice-separation` first, then install only after explicit confirmation.
+
 Do not install local dependencies silently. Ask the user first.

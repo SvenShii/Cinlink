@@ -11,18 +11,21 @@ Use this file only for first-time install or reconnect. For daily media work, re
 
 You're setting up CinLink for an agent so the user can run hosted media workflows without being asked for an API key in the middle of a task.
 
-Four things must exist on this machine:
+Five things should exist on this machine:
 
 1. The `cinlink` CLI installed.
 2. The CinLink skill folders registered with the current agent.
 3. A CinLink API key saved in the user's CLI config before the first hosted task.
+4. Local `ffmpeg` available for subtitle burn-in, local audio extraction, local audio mixing, and local media inspection.
+5. Optional `demucs` plus `soundfile` available only when the user wants local voice separation or background-music preservation.
 
 ## Install prompt contract
 
-- Do everything yourself where possible. Only ask the user for values you cannot generate: the CinLink API key and confirmation before installing system dependencies.
+- Do everything yourself where possible. Only ask the user for values you cannot generate: the CinLink API key and confirmation before installing local/system dependencies.
 - Prefer a stable clone path such as `~/Developer/Cinlink`; do not install from `/tmp` or `~/Downloads`.
 - Ask for the CinLink API key during install if it is not already configured.
 - Save the key with `cinlink --json onboarding --api-key <key>`. This writes user-level config, so it also works when the user installed only the skills and does not have a repo checkout.
+- After the CLI is installed, run `cinlink setup-local-deps` so the user is prompted to install local `ffmpeg`. Offer optional voice-separation dependencies (`demucs` and `soundfile`) during the same setup.
 - Never echo the API key back to the user. Never write it into `SKILL.md` or any tracked file.
 - Do not run hosted transcription, dubbing, image, or video generation as install verification unless the user explicitly asks; hosted work can spend credits.
 
@@ -54,7 +57,36 @@ Windows users can run:
 powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1
 ```
 
-### 3. Register the skills with the current agent
+### 3. Prompt for local dependencies
+
+Run the local dependency setup before the first media task:
+
+```bash
+cinlink setup-local-deps
+```
+
+This command:
+
+- Checks whether `ffmpeg` is available and supports subtitle burn-in.
+- Explains why CinLink needs `ffmpeg`.
+- Prompts before running a platform package manager such as `brew`, `winget`, `apt-get`, `dnf`, `pacman`, or `zypper`.
+- Offers optional `demucs` and `soundfile` for local voice separation/background preservation.
+
+For non-interactive automation, show the user the dry run first:
+
+```bash
+cinlink --json setup-local-deps --dry-run --with-voice-separation
+```
+
+Then install only after explicit confirmation:
+
+```bash
+cinlink setup-local-deps --yes --with-voice-separation
+```
+
+If the command reports `manual_required`, show the suggested command to the user and ask them to install it manually. Do not silently install system dependencies.
+
+### 4. Register the skills with the current agent
 
 Skip this step when the current skill installer already registered the skills. Otherwise register the whole skill folders, not just one `SKILL.md`.
 
@@ -76,7 +108,7 @@ Skip this step when the current skill installer already registered the skills. O
 
 If you cannot tell which agent is active, ask the user once which agent to install into.
 
-### 4. CinLink API key
+### 5. CinLink API key
 
 Hosted CinLink tools require the user's CinLink API key. Check existing state:
 
@@ -101,7 +133,7 @@ Optional endpoint overrides:
 cinlink --json onboarding --api-key "$KEY" --runtime-base https://runtime.cinlink.ai --billing-base https://app.cinlink.ai
 ```
 
-### 5. Verify
+### 6. Verify
 
 Run cheap checks only:
 
@@ -110,19 +142,20 @@ cinlink --json doctor
 cinlink --json tools list
 ```
 
-`doctor` should report `has_api_key: true`. If runtime health fails with a local network or sandbox error, do not treat that as an install failure; verify on the first real hosted task after network access is available.
+`doctor` should report `has_api_key: true`. It should also show `ffmpeg.subtitle_burn_available: true` for subtitle burn-in. If runtime health fails with a local network or sandbox error, do not treat that as an install failure; verify on the first real hosted task after network access is available.
 
-### 6. Hand off
+### 7. Hand off
 
 Tell the user:
 
 - Where CinLink is installed.
 - Whether the API key is configured.
+- Whether local `ffmpeg` is ready; if optional voice-separation dependencies were skipped, say that Demucs/soundfile can be installed later.
 - That a good first message is: "Using `/cinlink`, add subtitles to this video" or "Using `/cinlink`, generate a short product video."
 
 ## Cold-start reminders
 
 - Read `skills/cinlink/SKILL.md` before routing a task.
 - Hosted tasks require `CINLINK_API_KEY` from the environment or the `cinlink` user config written by onboarding.
-- Local-only tasks such as subtitle burn and audio mix do not require a key, but they need local `ffmpeg`.
-- Voice separation/background preservation is a local capability and needs `demucs` plus `soundfile`; ask before installing them.
+- Local-only tasks such as subtitle burn and audio mix do not require a key, but they need local `ffmpeg`; run `cinlink setup-local-deps` during install.
+- Voice separation/background preservation is a local capability and needs `demucs` plus `soundfile`; `cinlink setup-local-deps --with-voice-separation` installs them after confirmation.

@@ -63,7 +63,26 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -SkipApiK
 
 ```powershell
 cinlink --json onboarding --api-key ck_live_or_test_xxx
+cinlink setup-local-deps
 cinlink --json doctor
+```
+
+`cinlink setup-local-deps` 会检测并提示安装本地依赖：
+
+- `ffmpeg`：字幕烧录、本地抽音频、音频混合、本地媒体检查。
+- `demucs` + `soundfile`：可选，仅本地人声分离/保留背景音需要。
+
+非交互安装时先展示 dry run：
+
+```powershell
+cinlink --json setup-local-deps --dry-run --with-voice-separation
+```
+
+用户确认后再执行：
+
+```powershell
+cinlink setup-local-deps --yes
+cinlink setup-local-deps --yes --with-voice-separation
 ```
 
 不要在日志或最终回复里打印 key，也不要把 key 写入 `SKILL.md` 或任何可提交文件。
@@ -96,6 +115,7 @@ cinlink --json tools list
 ```powershell
 cinlink --json tools schema transcribe
 cinlink --json tools schema agent_run
+cinlink --json tools schema setup_local_deps
 ```
 
 跑一个 NLU：

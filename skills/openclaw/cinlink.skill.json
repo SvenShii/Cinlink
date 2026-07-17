@@ -17,6 +17,11 @@
       "tool_arg": "doctor"
     },
     {
+      "name": "cinlink_setup_local_deps",
+      "description": "Prompt for or install CinLink local dependencies such as ffmpeg and optional Demucs/soundfile.",
+      "tool_arg": "setup_local_deps"
+    },
+    {
       "name": "cinlink_agent_run",
       "description": "Submit a natural-language media task to the CinLink hosted agent.",
       "tool_arg": "agent_run"
