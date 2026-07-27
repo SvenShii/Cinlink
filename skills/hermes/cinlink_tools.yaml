@@ -23,6 +23,10 @@ tools:
     args_schema:
       prompt: string
       context_file: string[]
+      context_descriptors: object[]
+      client_request_id: string
+      app_language: string
+      hidden_context: string
       mode: string
       task_intent: string
       task_parameters: object
@@ -62,12 +66,14 @@ tools:
       position: string
       watermark_text: string
       watermark_image_path: string
+      no_brand_kit: boolean
   - name: cinlink_dub
     command: cinlink --json dub "{video_path}" --subtitle "{subtitle_path}"
     args_schema:
       video_path: string
       subtitle_path: string
       reference_subtitle_path: string
+      reference_audio_paths: object
       voice: string
       language: string
       out: string
@@ -77,6 +83,59 @@ tools:
       video_path: string
       subtitle_path: string
       out: string
+      font_size: integer
+      font_name: string
+      font_color: string
+      outline_color: string
+      outline_width: number
+      margin_v: integer
+      position: string
+      watermark_text: string
+      watermark_image_path: string
+      no_brand_kit: boolean
+  - name: cinlink_apply_watermark
+    command: cinlink --json apply-watermark "{video_path}"
+    args_schema:
+      video_path: string
+      out: string
+      no_brand_kit: boolean
+      watermark_text: string
+      watermark_position: string
+      watermark_font_size: integer
+      watermark_color: string
+      watermark_opacity: number
+      watermark_margin: integer
+      watermark_image_path: string
+      watermark_image_position: string
+      watermark_image_width: integer
+      watermark_image_opacity: number
+      watermark_image_margin: integer
+  - name: cinlink_trim_video
+    command: cinlink --json trim-video "{video_path}" --start "{start_sec}" --end "{end_sec}"
+    args_schema:
+      video_path: string
+      start_sec: number
+      end_sec: number
+      out: string
+  - name: cinlink_montage
+    command: cinlink --json montage --clips-json "{clips}"
+    args_schema:
+      clips: object[]
+      out: string
+  - name: cinlink_clean_cut
+    command: cinlink --json clean-cut "{video_path}"
+    args_schema:
+      video_path: string
+      out: string
+      minimum_silence_sec: number
+      noise_threshold_db: number
+      retained_pause_sec: number
+      minimum_removal_sec: number
+  - name: cinlink_brand_kit
+    command: cinlink --json brand-kit "{action}"
+    args_schema:
+      action: string
+      enabled: boolean
       font_size: integer
       font_name: string
       font_color: string

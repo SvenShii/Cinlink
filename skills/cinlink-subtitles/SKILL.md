@@ -45,7 +45,7 @@ Return `subtitle_path` and `preview_text` to the user.
 cinlink --json translate /absolute/input.srt --from auto --to en --bilingual --delivery subtitle --out /absolute/out
 ```
 
-For a media file, CinLink may transcribe before translating.
+For a media file, CinLink may transcribe before translating. When the input is a video, the CLI keeps the full video local, extracts audio with `ffmpeg`, and uploads only that audio to the hosted runtime.
 
 ### Burn Subtitles
 
@@ -55,10 +55,20 @@ cinlink --json burn /absolute/video.mp4 --subtitle /absolute/subtitles.srt --fon
 
 Burn is local-only and requires `ffmpeg`. Optional styling includes font name, colors, outline, margin, text watermark, and image watermark. If `dependency_missing`, run `/cinlink-cli` doctor and ask before installing local dependencies.
 
+Enabled Brand Kit settings are applied automatically to `add-subtitles` and `burn`. Explicit flags override the saved values. Use `--no-brand-kit` only when the user asks for a one-off export that must ignore their saved brand:
+
+```bash
+cinlink --json brand-kit show
+cinlink --json burn /absolute/video.mp4 --subtitle /absolute/subtitles.srt --no-brand-kit --out /absolute/out
+```
+
 ## Rules
 
 - Use absolute paths for local files.
 - For "给视频加字幕", "加个字幕", "add captions/subtitles", or similar app-like requests, prefer `add-subtitles` over manually calling `transcribe` then `burn`.
 - Do not require a CinLink API key for burn-only tasks.
 - Ask for/configure the API key for hosted transcribe/translate/add-subtitles tasks.
+- Expect local `ffmpeg` for every hosted workflow that starts from a video, because the current runtime accepts extracted audio rather than a full video upload.
 - For translated voice output, switch to `/cinlink-dubbing`.
+- When a response contains multiple subtitle artifacts, choose `artifact_role=translated_subtitle` for translated output, `edited_subtitle` for shortened/edited output, and `source_subtitle` only when the original-language subtitle is requested. Do not select the first `.srt` blindly.
+- Return the `privacy_receipt`: for video input, the source video stays local while extracted audio may be processed by CinLink Cloud; final subtitle burn remains local.

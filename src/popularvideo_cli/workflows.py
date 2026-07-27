@@ -116,6 +116,8 @@ def add_subtitles(
         "steps": steps,
         "source_payload": source_payload,
         "burn": burn_payload,
+        "artifacts": burn_payload.get("artifacts") or [],
+        "privacy_receipt": _combined_privacy_receipt(source_payload, "burn_subtitles"),
     }
 
 
@@ -154,6 +156,7 @@ def _subtitle_path_from_payload(payload: dict[str, Any]) -> Path:
 def _first_subtitle_artifact(value: Any) -> str | None:
     if not isinstance(value, list):
         return None
+    candidates: list[tuple[int, str]] = []
     for artifact in value:
         if not isinstance(artifact, dict):
             continue
@@ -161,5 +164,34 @@ def _first_subtitle_artifact(value: Any) -> str | None:
         path = artifact.get("path") or artifact.get("local_path")
         name = str(artifact.get("name") or path or "")
         if path and (kind == "subtitle" or name.lower().endswith((".srt", ".ass", ".vtt"))):
-            return str(path)
-    return None
+            metadata = artifact.get("metadata")
+            metadata = metadata if isinstance(metadata, dict) else {}
+            role = str(metadata.get("artifact_role") or "").lower()
+            score = 0
+            if role == "translated_subtitle":
+                score += 300
+            elif role == "edited_subtitle":
+                score += 200
+            elif role == "source_subtitle":
+                score += 80
+            candidates.append((score, str(path)))
+    return max(candidates, default=(0, ""))[1] or None
+
+
+def _combined_privacy_receipt(source_payload: dict[str, Any], local_step: str) -> dict[str, Any]:
+    source_receipt = source_payload.get("privacy_receipt")
+    source_receipt = source_receipt if isinstance(source_receipt, dict) else {}
+    local_steps = [
+        str(step)
+        for step in source_receipt.get("local_steps", [])
+        if step
+    ]
+    if local_step not in local_steps:
+        local_steps.append(local_step)
+    return {
+        "source_video": source_receipt.get("source_video") or "stayed_local",
+        "hosted_inputs": list(source_receipt.get("hosted_inputs") or []),
+        "local_steps": local_steps,
+        "cloud_steps": list(source_receipt.get("cloud_steps") or []),
+        "local_final_video_processing": True,
+    }

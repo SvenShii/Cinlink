@@ -13,7 +13,7 @@ Use this for analysis and planning of existing media.
 cinlink --json summarize /absolute/video.mp4 --max-highlights 5 --out /absolute/out
 ```
 
-Return the summary, highlights, and artifact paths.
+For video input, the CLI extracts audio locally with `ffmpeg` and uploads only the audio. Return the summary, highlights, `source_video_path`, and artifact paths.
 
 ## Shorten
 
@@ -21,7 +21,7 @@ Return the summary, highlights, and artifact paths.
 cinlink --json shorten /absolute/video.mp4 --target-duration 45 --max-clips 5 --out /absolute/out
 ```
 
-The hosted runtime returns a highlight plan and artifact paths when available. Rendering the final cut may require local video tools or the hosted agent workflow.
+The CLI keeps the full video local, uploads extracted audio for hosted analysis, and returns `source_video_path` with the highlight plan and artifact paths when available. Use `/cinlink-editing` to render known timestamp ranges with `trim-video` or combine selected ranges with `montage`; use `/cinlink-agent` when the plan requires broader orchestration.
 
 Optional arguments:
 
@@ -37,4 +37,6 @@ For ambiguous user wording:
 cinlink --json nlu "<prompt>" --has-video --has-subtitle --context-file /absolute/video.mp4
 ```
 
-Use the returned action and slots to pick `/cinlink-subtitles`, `/cinlink-dubbing`, `/cinlink-generation`, or `/cinlink-agent`.
+Use the returned action and slots to pick `/cinlink-subtitles`, `/cinlink-dubbing`, `/cinlink-editing`, `/cinlink-generation`, or `/cinlink-agent`.
+
+Return the `privacy_receipt`: the full source video should stay local, while extracted audio may be processed by CinLink Cloud for understanding.

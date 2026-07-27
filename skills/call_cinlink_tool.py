@@ -19,6 +19,11 @@ def main() -> int:
             "add_subtitles",
             "dub",
             "burn",
+            "apply_watermark",
+            "trim_video",
+            "montage",
+            "clean_cut",
+            "brand_kit",
             "mix_dubbed_audio",
             "summarize",
             "shorten",
@@ -89,31 +94,26 @@ def build_command(tool: str, args: dict) -> list[str]:
             *optional("--outline-color", args.get("outline_color")),
             *optional("--outline-width", args.get("outline_width")),
             *optional("--margin-v", args.get("margin_v")),
-            "--position",
-            args.get("position", "bottom"),
+            *optional("--position", args.get("position")),
             *optional("--watermark-text", args.get("watermark_text")),
-            "--watermark-position",
-            args.get("watermark_position", "top-right"),
+            *optional("--watermark-position", args.get("watermark_position")),
             *optional("--watermark-font-size", args.get("watermark_font_size")),
             *optional("--watermark-color", args.get("watermark_color")),
-            "--watermark-opacity",
-            str(args.get("watermark_opacity", 0.72)),
-            "--watermark-margin",
-            str(args.get("watermark_margin", 24)),
+            *optional("--watermark-opacity", args.get("watermark_opacity")),
+            *optional("--watermark-margin", args.get("watermark_margin")),
             *optional("--watermark-image", args.get("watermark_image_path")),
-            "--watermark-image-position",
-            args.get("watermark_image_position", "top-right"),
+            *optional("--watermark-image-position", args.get("watermark_image_position")),
             *optional("--watermark-image-width", args.get("watermark_image_width")),
-            "--watermark-image-opacity",
-            str(args.get("watermark_image_opacity", 0.72)),
-            "--watermark-image-margin",
-            str(args.get("watermark_image_margin", 24)),
+            *optional("--watermark-image-opacity", args.get("watermark_image_opacity")),
+            *optional("--watermark-image-margin", args.get("watermark_image_margin")),
         ]
         if args.get("bilingual"):
             command.append("--bilingual")
+        if args.get("no_brand_kit"):
+            command.append("--no-brand-kit")
         return command
     if tool == "dub":
-        return base + [
+        command = base + [
             "dub",
             args["video_path"],
             "--subtitle",
@@ -125,8 +125,11 @@ def build_command(tool: str, args: dict) -> list[str]:
             *optional("--out", args.get("out")),
             *optional("--timeout", args.get("timeout")),
         ]
+        for speaker_id, path in sorted((args.get("reference_audio_paths") or {}).items()):
+            command.extend(["--reference-audio", f"{speaker_id}={path}"])
+        return command
     if tool == "burn":
-        return base + [
+        command = base + [
             "burn",
             args["video_path"],
             "--subtitle",
@@ -138,26 +141,106 @@ def build_command(tool: str, args: dict) -> list[str]:
             *optional("--outline-color", args.get("outline_color")),
             *optional("--outline-width", args.get("outline_width")),
             *optional("--margin-v", args.get("margin_v")),
-            "--position",
-            args.get("position", "bottom"),
+            *optional("--position", args.get("position")),
             *optional("--watermark-text", args.get("watermark_text")),
-            "--watermark-position",
-            args.get("watermark_position", "top-right"),
+            *optional("--watermark-position", args.get("watermark_position")),
             *optional("--watermark-font-size", args.get("watermark_font_size")),
             *optional("--watermark-color", args.get("watermark_color")),
-            "--watermark-opacity",
-            str(args.get("watermark_opacity", 0.72)),
-            "--watermark-margin",
-            str(args.get("watermark_margin", 24)),
+            *optional("--watermark-opacity", args.get("watermark_opacity")),
+            *optional("--watermark-margin", args.get("watermark_margin")),
             *optional("--watermark-image", args.get("watermark_image_path")),
-            "--watermark-image-position",
-            args.get("watermark_image_position", "top-right"),
+            *optional("--watermark-image-position", args.get("watermark_image_position")),
             *optional("--watermark-image-width", args.get("watermark_image_width")),
-            "--watermark-image-opacity",
-            str(args.get("watermark_image_opacity", 0.72)),
-            "--watermark-image-margin",
-            str(args.get("watermark_image_margin", 24)),
+            *optional("--watermark-image-opacity", args.get("watermark_image_opacity")),
+            *optional("--watermark-image-margin", args.get("watermark_image_margin")),
         ]
+        if args.get("no_brand_kit"):
+            command.append("--no-brand-kit")
+        return command
+    if tool == "apply_watermark":
+        command = base + [
+            "apply-watermark",
+            args["video_path"],
+            *optional("--out", args.get("out")),
+            *optional("--watermark-text", args.get("watermark_text")),
+            *optional("--watermark-position", args.get("watermark_position")),
+            *optional("--watermark-font-size", args.get("watermark_font_size")),
+            *optional("--watermark-color", args.get("watermark_color")),
+            *optional("--watermark-opacity", args.get("watermark_opacity")),
+            *optional("--watermark-margin", args.get("watermark_margin")),
+            *optional("--watermark-image", args.get("watermark_image_path")),
+            *optional("--watermark-image-position", args.get("watermark_image_position")),
+            *optional("--watermark-image-width", args.get("watermark_image_width")),
+            *optional("--watermark-image-opacity", args.get("watermark_image_opacity")),
+            *optional("--watermark-image-margin", args.get("watermark_image_margin")),
+        ]
+        if args.get("no_brand_kit"):
+            command.append("--no-brand-kit")
+        return command
+    if tool == "trim_video":
+        return base + [
+            "trim-video",
+            args["video_path"],
+            "--start",
+            str(args["start_sec"]),
+            "--end",
+            str(args["end_sec"]),
+            *optional("--out", args.get("out")),
+        ]
+    if tool == "montage":
+        return base + [
+            "montage",
+            "--clips-json",
+            json.dumps(args["clips"], ensure_ascii=False),
+            *optional("--out", args.get("out")),
+        ]
+    if tool == "clean_cut":
+        return base + [
+            "clean-cut",
+            args["video_path"],
+            "--minimum-silence",
+            str(args.get("minimum_silence_sec", 0.75)),
+            "--noise-threshold-db",
+            str(args.get("noise_threshold_db", -35.0)),
+            "--retained-pause",
+            str(args.get("retained_pause_sec", 0.24)),
+            "--minimum-removal",
+            str(args.get("minimum_removal_sec", 0.18)),
+            *optional("--out", args.get("out")),
+        ]
+    if tool == "brand_kit":
+        action = args.get("action", "show")
+        command = base + ["brand-kit", action]
+        if action != "set":
+            return command
+        if args.get("enabled") is True:
+            command.append("--enable")
+        elif args.get("enabled") is False:
+            command.append("--disable")
+        for key, flag in (
+            ("font_size", "--font-size"),
+            ("font_name", "--font-name"),
+            ("font_color", "--font-color"),
+            ("outline_color", "--outline-color"),
+            ("outline_width", "--outline-width"),
+            ("margin_v", "--margin-v"),
+            ("position", "--position"),
+            ("watermark_text", "--watermark-text"),
+            ("watermark_position", "--watermark-position"),
+            ("watermark_font_size", "--watermark-font-size"),
+            ("watermark_color", "--watermark-color"),
+            ("watermark_opacity", "--watermark-opacity"),
+            ("watermark_margin", "--watermark-margin"),
+            ("watermark_image_path", "--watermark-image"),
+            ("watermark_image_position", "--watermark-image-position"),
+            ("watermark_image_width", "--watermark-image-width"),
+            ("watermark_image_opacity", "--watermark-image-opacity"),
+            ("watermark_image_margin", "--watermark-image-margin"),
+        ):
+            command.extend(optional(flag, args.get(key)))
+        if args.get("clear_watermark_image"):
+            command.append("--clear-watermark-image")
+        return command
     if tool == "mix_dubbed_audio":
         return base + [
             "mix-dubbed-audio",
@@ -194,7 +277,7 @@ def build_command(tool: str, args: dict) -> list[str]:
             command.append("--no-audio")
         if args.get("watermark"):
             command.append("--watermark")
-        command.extend(["--generation-mode", args.get("generation_mode", "text")])
+        command.extend(optional("--generation-mode", args.get("generation_mode")))
         command.extend(optional("--resolution", args.get("resolution")))
         command.extend(optional("--first-frame-image-url", args.get("first_frame_image_url")))
         for url in args.get("reference_image_urls", []):
@@ -218,8 +301,13 @@ def build_command(tool: str, args: dict) -> list[str]:
         command = base + ["agent", "run", args["prompt"], "--mode", args.get("mode", "execute")]
         for path in args.get("context_file", []):
             command.extend(["--context-file", path])
+        for descriptor in args.get("context_descriptors", []):
+            command.extend(["--context-json", json.dumps(descriptor, ensure_ascii=False)])
         command.extend(optional("--conversation-id", args.get("conversation_id")))
+        command.extend(optional("--client-request-id", args.get("client_request_id")))
+        command.extend(optional("--app-language", args.get("app_language")))
         command.extend(optional("--task-intent", args.get("task_intent")))
+        command.extend(optional("--hidden-context", args.get("hidden_context")))
         if args.get("task_parameters"):
             command.extend(["--task-parameters-json", json.dumps(args["task_parameters"], ensure_ascii=False)])
         if args.get("conversation_state"):
@@ -232,7 +320,7 @@ def build_command(tool: str, args: dict) -> list[str]:
 
 
 def optional(flag: str, value) -> list[str]:
-    return [flag, str(value)] if value else []
+    return [flag, str(value)] if value is not None and value != "" else []
 
 
 if __name__ == "__main__":

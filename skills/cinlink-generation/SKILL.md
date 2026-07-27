@@ -33,8 +33,17 @@ Optional:
 - repeated `--reference-audio-url <url>`
 - `--model`, `--model-name`, `--model-version`
 
+When reference URLs are present and `--generation-mode` is omitted, the CLI selects `reference`; otherwise it selects `text`.
+
+For follow-up generation through `/cinlink-agent`, preserve the returned artifact identity instead of reducing it to a local path:
+
+```bash
+cinlink --json agent run "Animate this image." --app-language en --context-json '{"name":"generated.png","kind":"image","public_url":"https://...","cloud_file_id":"...","metadata":{"artifact_role":"generated_image","producer_step":"generate_image"}}' --task-intent generate_video --wait
+```
+
 ## Rules
 
 - Use hosted generation only after API key setup via `/cinlink-cli`.
 - Reference inputs are remote URLs, not local paths, unless the hosted agent runtime has uploaded/presigned them.
+- Reuse returned `public_url`, `cloud_file_id`, `artifact_role`, and `producer_step` in follow-up context so the runtime can preserve generated-media lineage.
 - Return generated artifact paths/URLs and any job id in the final response.

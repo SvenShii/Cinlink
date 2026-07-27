@@ -18,7 +18,7 @@ Five things should exist on this machine:
 1. The `cinlink` CLI installed.
 2. The CinLink skill folders registered with the current agent.
 3. A CinLink API key saved in the user's CLI config before the first hosted task.
-4. Local `ffmpeg` available for subtitle burn-in, local audio extraction, local audio mixing, and local media inspection.
+4. Local `ffmpeg`/`ffprobe` available for subtitle burn-in, local audio extraction/mixing, Clean Cut, trimming, montage, watermarking, and local media inspection.
 5. Optional `demucs` plus `soundfile` available only when the user wants local voice separation or background-music preservation.
 
 ## Install prompt contract
@@ -100,12 +100,13 @@ Skip this step when the current skill installer already registered the skills. O
     ln -sfn ~/Developer/Cinlink/skills/cinlink-cli "${CODEX_HOME:-$HOME/.codex}/skills/cinlink-cli"
     ln -sfn ~/Developer/Cinlink/skills/cinlink-subtitles "${CODEX_HOME:-$HOME/.codex}/skills/cinlink-subtitles"
     ln -sfn ~/Developer/Cinlink/skills/cinlink-dubbing "${CODEX_HOME:-$HOME/.codex}/skills/cinlink-dubbing"
+    ln -sfn ~/Developer/Cinlink/skills/cinlink-editing "${CODEX_HOME:-$HOME/.codex}/skills/cinlink-editing"
     ln -sfn ~/Developer/Cinlink/skills/cinlink-understanding "${CODEX_HOME:-$HOME/.codex}/skills/cinlink-understanding"
     ln -sfn ~/Developer/Cinlink/skills/cinlink-generation "${CODEX_HOME:-$HOME/.codex}/skills/cinlink-generation"
     ln -sfn ~/Developer/Cinlink/skills/cinlink-agent "${CODEX_HOME:-$HOME/.codex}/skills/cinlink-agent"
     ```
 
-- **Claude Code** (`~/.claude/` present): symlink the same seven skill folders into `~/.claude/skills/`.
+- **Claude Code** (`~/.claude/` present): symlink the same eight skill folders into `~/.claude/skills/`.
 - **Hermes / Openclaw / another agent**: register the skill folders using that agent's skill directory or import mechanism.
 
 If you cannot tell which agent is active, ask the user once which agent to install into.
@@ -159,5 +160,5 @@ Tell the user:
 
 - Read `skills/cinlink/SKILL.md` before routing a task.
 - Hosted tasks require `CINLINK_API_KEY` from the environment or the `cinlink` user config written by onboarding.
-- Local-only tasks such as subtitle burn and audio mix do not require a key, but they need local `ffmpeg`; run `cinlink setup-local-deps` during install.
+- Local-only tasks such as subtitle burn, Clean Cut, trimming, montage, watermarking, and audio mix do not require a key, but they need local `ffmpeg`/`ffprobe`; run `cinlink setup-local-deps` during install.
 - Voice separation/background preservation is a local capability and needs `demucs` plus `soundfile`; `cinlink setup-local-deps --with-voice-separation` installs them after confirmation.

@@ -78,7 +78,7 @@ cinlink --json doctor
 
 `cinlink setup-local-deps` 会检测并提示安装本地依赖：
 
-- `ffmpeg`：字幕烧录、本地抽音频、音频混合、本地媒体检查。
+- `ffmpeg`/`ffprobe`：字幕烧录、本地抽音频、音频混合、Clean Cut、精确裁剪、混剪、水印和本地媒体检查。
 - `demucs` + `soundfile`：可选，仅本地人声分离/保留背景音需要。
 
 非交互安装时先展示 dry run：
@@ -125,6 +125,8 @@ cinlink --json tools list
 cinlink --json tools schema transcribe
 cinlink --json tools schema agent_run
 cinlink --json tools schema setup_local_deps
+cinlink --json tools schema clean_cut
+cinlink --json tools schema brand_kit
 ```
 
 跑一个 NLU：
@@ -136,7 +138,7 @@ cinlink --json nlu "把这个视频翻译成英文字幕" --has-video
 跑 agent：
 
 ```powershell
-cinlink --json agent run "把这个视频总结成 5 条卖点" --context-file "D:\videos\demo.mp4"
+cinlink --json agent run "把这个视频总结成 5 条卖点" --context-file "D:\videos\demo.mp4" --app-language zh
 cinlink --json agent run "给这个视频加英文字幕，并输出带字幕视频" --context-file "D:\videos\demo.mp4" --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait
 ```
 
@@ -173,14 +175,27 @@ cinlink --json <command>
 ```powershell
 cinlink --json transcribe "D:\videos\demo.mp4"
 cinlink --json translate "D:\videos\demo.srt" --to en
+cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --lang en
+cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --lang en --reference-audio "speaker_0=D:\voices\speaker.wav"
 cinlink --json burn "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt"
+cinlink --json clean-cut "D:\videos\demo.mp4"
+cinlink --json trim-video "D:\videos\demo.mp4" --start 12.4 --end 18.8
+cinlink --json montage --clips-json "[{\"path\":\"D:\\videos\\demo.mp4\",\"start_sec\":0,\"end_sec\":4},{\"path\":\"D:\\videos\\demo.mp4\",\"start_sec\":8,\"end_sec\":12}]"
+cinlink --json brand-kit set --enable --font-name Arial --watermark-image "D:\brand\logo.png"
+cinlink --json apply-watermark "D:\videos\demo.mp4"
 cinlink --json summarize "D:\videos\demo.mp4"
 cinlink --json shorten "D:\videos\demo.mp4" --target-duration 45
 cinlink --json image "小红书风格的美食封面图"
 cinlink --json video "5 秒产品展示视频，干净背景"
 cinlink --json agent run "把这个视频剪成 3 个 15 秒短视频" --context-file "D:\videos\demo.mp4"
-cinlink --json agent run "给这个视频加英文字幕，并输出带字幕视频" --context-file "D:\videos\demo.mp4" --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait
+cinlink --json agent run "给这个视频加英文字幕，并输出带字幕视频" --context-file "D:\videos\demo.mp4" --client-request-id request_123 --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait
 ```
+
+新版 hosted runtime 在转写、视频翻译、总结、短视频规划和配音流程中都不再接收完整视频。CLI 收到本地视频后会先用本地 `ffmpeg` 抽取音频，只把音频发给服务端，完整视频保留在用户机器上。多说话人配音参考音频用重复的 `--reference-audio speaker_id=path`。
+
+Agent 调用应该传 `--app-language zh|en|ja`。继续使用之前的生成结果时，用 `--context-json` 保留 `public_url`、`cloud_file_id`、`artifact_role` 和 `producer_step`，不要只留下一个本地文件名。
+
+Brand Kit 保存在同一个用户级 JSON 配置里，不使用 `.env`。启用后会自动应用到后续 `add-subtitles`、`burn` 和 `apply-watermark`，单次显式参数优先。
 
 如果 OpenClaw 支持 skill manifest，可以参考：
 
@@ -238,6 +253,11 @@ MCP 启动后，Hermes 会看到这些工具：
 transcribe
 translate
 burn
+apply_watermark
+trim_video
+montage
+clean_cut
+brand_kit
 summarize
 shorten
 image
@@ -310,7 +330,7 @@ MCP 的好处是 agent 能自动读取工具 schema，不需要你手写很多�
 
 ## 10. 本地 ffmpeg
 
-`burn` 是本地能力，需要 `ffmpeg` 在 PATH 里：
+`burn`、`clean-cut`、`trim-video`、`montage` 和 `apply-watermark` 都是本地能力，需要 `ffmpeg`/`ffprobe`：
 
 ```powershell
 ffmpeg -version

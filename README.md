@@ -39,7 +39,7 @@ During install, the agent should also run:
 cinlink setup-local-deps
 ```
 
-This prompts the user to install local `ffmpeg` for subtitle burn-in, local audio extraction/mixing, and local media inspection. It also offers optional `demucs` and `soundfile` for local voice separation/background preservation.
+This prompts the user to install local `ffmpeg`/`ffprobe` for subtitle burn-in, local audio extraction/mixing, Clean Cut, trimming, montage, watermarking, and local media inspection. It also offers optional `demucs` and `soundfile` for local voice separation/background preservation.
 
 Try prompts like:
 
@@ -124,18 +124,26 @@ cinlink --json add-subtitles "D:\videos\demo.mp4" --target-lang en
 cinlink --json transcribe "D:\videos\demo.mp4"
 cinlink --json translate "D:\videos\demo.srt" --to en
 cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --lang en
+cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --lang en --reference-audio "speaker_0=D:\voices\speaker.wav"
 cinlink --json burn "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt"
+cinlink --json clean-cut "D:\videos\demo.mp4"
+cinlink --json trim-video "D:\videos\demo.mp4" --start 12.4 --end 18.8
+cinlink --json montage --clips-json "[{\"path\":\"D:\\videos\\demo.mp4\",\"start_sec\":0,\"end_sec\":4},{\"path\":\"D:\\videos\\demo.mp4\",\"start_sec\":8,\"end_sec\":12}]"
+cinlink --json brand-kit set --enable --font-name Arial --watermark-image "D:\brand\logo.png"
+cinlink --json apply-watermark "D:\videos\demo.mp4"
 cinlink --json mix-dubbed-audio "D:\videos\demo.mp4" --dubbed-audio "D:\videos\dubbed.wav"
 cinlink --json summarize "D:\videos\demo.mp4"
 cinlink --json shorten "D:\videos\demo.mp4" --target-duration 45
 cinlink --json image "a clean product poster"
 cinlink --json video "a 5 second cinematic product reveal"
 
-cinlink --json agent run "Summarize this video into five selling points" --context-file "D:\videos\demo.mp4"
-cinlink --json agent run "Add English subtitles and return the subtitled video" --context-file "D:\videos\demo.mp4" --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait
+cinlink --json agent run "Summarize this video into five selling points" --context-file "D:\videos\demo.mp4" --app-language en
+cinlink --json agent run "Add English subtitles and return the subtitled video" --context-file "D:\videos\demo.mp4" --client-request-id request_123 --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait
 cinlink --json agent poll run_xxx
 cinlink --json agent local-tools run_xxx
 ```
+
+The current hosted runtime keeps full user videos off the server for transcription, media translation, summarization, shortening, and dubbing. When those commands receive a local video, the CLI extracts audio with local `ffmpeg` and uploads only the audio. `cinlink dub` also supports repeated `--reference-audio speaker_id=path` values for speaker-specific voice references.
 
 ## Stable JSON Contract
 
@@ -204,6 +212,7 @@ The `skills/` directory contains installable skills for agent systems that prefe
 | `/cinlink-cli` | Install/configure CLI, store API key, run doctor, inspect tool schemas, use JSON bridge. |
 | `/cinlink-subtitles` | Transcribe, translate subtitles/media, produce bilingual subtitles, burn styled subtitles/watermarks. |
 | `/cinlink-dubbing` | Voice translation, dubbing, dubbed audio generation, local dubbed-audio mixing. |
+| `/cinlink-editing` | Clean Cut, exact clips, ordered montage, local watermarks, persistent Brand Kit. |
 | `/cinlink-understanding` | Summarize videos, extract highlights, shorten long videos into plans, NLU routing. |
 | `/cinlink-generation` | Generate AI images and AI videos with hosted providers and remote references. |
 | `/cinlink-agent` | Multi-step natural-language media workflows through the hosted CinLink agent runtime. |
@@ -222,4 +231,4 @@ cinlink --json onboarding --api-key ck_live_or_test_xxx
 
 For agent installs, prefer the install-time flow in `install.md`: collect the key once, run `cinlink --json onboarding --api-key <key>`, then use `cinlink --json doctor` to confirm `has_api_key: true`.
 
-Local-only capabilities such as subtitle burn-in and dubbed-audio mixing require local `ffmpeg`. Voice separation or background-music preservation through separated stems also requires local `demucs` and `soundfile`; agents should ask the user before installing local dependencies.
+Local-only capabilities such as subtitle burn-in, Clean Cut, trimming, montage, watermarking, and dubbed-audio mixing require local `ffmpeg`/`ffprobe`. Voice separation or background-music preservation through separated stems also requires local `demucs` and `soundfile`; agents should ask the user before installing local dependencies.

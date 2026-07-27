@@ -33,7 +33,7 @@
     },
     {
       "name": "cinlink_translate",
-      "description": "Translate subtitles or media.",
+      "description": "Translate subtitles or media; local video input is converted to audio before hosted upload.",
       "tool_arg": "translate"
     },
     {
@@ -43,7 +43,7 @@
     },
     {
       "name": "cinlink_dub",
-      "description": "Generate dubbed speech/audio from a video and subtitle file.",
+      "description": "Generate dubbed speech/audio from local audio extraction plus subtitles and optional speaker reference audio.",
       "tool_arg": "dub"
     },
     {
@@ -52,18 +52,43 @@
       "tool_arg": "burn"
     },
     {
+      "name": "cinlink_apply_watermark",
+      "description": "Apply a saved Brand Kit or one-off text/image watermark to a local video.",
+      "tool_arg": "apply_watermark"
+    },
+    {
+      "name": "cinlink_trim_video",
+      "description": "Cut a precise timestamp range from a local video.",
+      "tool_arg": "trim_video"
+    },
+    {
+      "name": "cinlink_montage",
+      "description": "Combine selected local video ranges into an ordered montage.",
+      "tool_arg": "montage"
+    },
+    {
+      "name": "cinlink_clean_cut",
+      "description": "Detect and remove long pauses from a local video while preserving natural pause edges.",
+      "tool_arg": "clean_cut"
+    },
+    {
+      "name": "cinlink_brand_kit",
+      "description": "Show or configure the persistent caption and watermark Brand Kit.",
+      "tool_arg": "brand_kit"
+    },
+    {
       "name": "cinlink_mix_dubbed_audio",
       "description": "Mix dubbed audio with the original local video audio.",
       "tool_arg": "mix_dubbed_audio"
     },
     {
       "name": "cinlink_summarize",
-      "description": "Summarize a local video or subtitle file.",
+      "description": "Summarize local video/audio/subtitles; full videos stay local and only extracted audio is uploaded.",
       "tool_arg": "summarize"
     },
     {
       "name": "cinlink_shorten",
-      "description": "Create a highlight plan for a local video.",
+      "description": "Create a highlight plan from locally extracted video audio and retain the source path for rendering.",
       "tool_arg": "shorten"
     },
     {

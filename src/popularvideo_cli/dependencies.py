@@ -29,6 +29,7 @@ VOICE_SEPARATION_KEYWORDS = (
 
 def local_dependency_report() -> dict[str, Any]:
     ffmpeg_path = resolve_ffmpeg(require_subtitles=False)
+    ffprobe_path = resolve_ffprobe(ffmpeg_path)
     subtitle_ffmpeg_path = resolve_ffmpeg(require_subtitles=True)
     demucs_available = importlib.util.find_spec("demucs") is not None
     soundfile_available = importlib.util.find_spec("soundfile") is not None
@@ -46,13 +47,28 @@ def local_dependency_report() -> dict[str, Any]:
             "subtitles_filter": bool(subtitle_ffmpeg_path),
             "subtitle_burn_available": bool(subtitle_ffmpeg_path),
             "subtitle_burn_path": str(subtitle_ffmpeg_path) if subtitle_ffmpeg_path else None,
-            "used_for": ["subtitle_burn", "local_audio_extract", "local_mix", "local_voice_separation"],
+            "used_for": [
+                "subtitle_burn",
+                "local_audio_extract",
+                "local_mix",
+                "local_video_trim",
+                "local_montage",
+                "clean_cut",
+                "watermark",
+                "local_voice_separation",
+            ],
             "install_hint": {
                 "windows": "winget install Gyan.FFmpeg",
                 "macos": "brew install ffmpeg, or use the CinLink app-managed ffmpeg bundle",
                 "linux": "Use the distro package manager, for example sudo apt-get install ffmpeg",
                 "cinlink": "cinlink setup-local-deps",
             },
+        },
+        "ffprobe": {
+            "available": bool(ffprobe_path),
+            "path": str(ffprobe_path) if ffprobe_path else None,
+            "used_for": ["local_media_probe", "local_video_trim", "local_montage", "clean_cut"],
+            "install_hint": "ffprobe is normally installed with ffmpeg.",
         },
         "demucs": {
             "available": demucs_available,
@@ -80,15 +96,31 @@ def local_dependency_report() -> dict[str, Any]:
 def default_client_capabilities_from_dependencies() -> dict[str, bool]:
     report = local_dependency_report()
     ffmpeg_available = bool(report["ffmpeg"]["available"])
+    ffprobe_available = bool(report["ffprobe"]["available"])
+    editing_available = ffmpeg_available and ffprobe_available
     subtitle_burn_available = bool(report["ffmpeg"].get("subtitle_burn_available"))
     voice_separation_available = bool(report["local_voice_separation"]["available"])
     return {
+        "can_search_analyzed_videos": False,
+        "can_search_local_files": False,
+        "can_read_local_files": False,
+        "can_read_clipboard": False,
+        "can_capture_screenshot": False,
+        "can_read_app_context": False,
         "can_extract_audio_locally": ffmpeg_available,
-        "can_probe_video_locally": ffmpeg_available,
+        "can_extract_video_frames_locally": ffmpeg_available,
+        "can_probe_video_locally": editing_available,
+        "can_edit_video_locally": editing_available,
+        "can_apply_watermark_locally": subtitle_burn_available,
         "can_burn_subtitles_locally": subtitle_burn_available,
-        "can_render_video_locally": False,
+        "can_render_video_locally": editing_available,
+        "split_dub_pipeline_v1": ffmpeg_available,
+        "trusted_fixed_workflow_routing": False,
+        "can_enhance_video_locally": False,
         "can_separate_vocals_locally": voice_separation_available,
         "can_preserve_background_music_locally": voice_separation_available,
+        "can_clean_cut_locally": editing_available,
+        "can_manage_brand_kit_locally": True,
         "can_download_artifacts": True,
     }
 
@@ -136,6 +168,24 @@ def resolve_ffmpeg(require_subtitles: bool = False) -> Path | None:
         if require_subtitles and not ffmpeg_supports_filter(candidate, "subtitles"):
             continue
         return candidate
+    return None
+
+
+def resolve_ffprobe(ffmpeg_path: Path | None = None) -> Path | None:
+    candidates: list[Path] = []
+    for env_name in ("CINLINK_FFPROBE", "ADDSUBTITLE_FFPROBE", "FFPROBE_BINARY"):
+        value = os.environ.get(env_name)
+        if value:
+            candidates.append(Path(value).expanduser())
+    if ffmpeg_path:
+        candidates.append(ffmpeg_path.with_name("ffprobe"))
+    candidates.extend(path.with_name("ffprobe") for path in ffmpeg_candidates())
+    which = shutil.which("ffprobe")
+    if which:
+        candidates.append(Path(which))
+    for candidate in _unique_paths(candidates):
+        if _is_executable(candidate) and _binary_works(candidate, ["-version"]):
+            return candidate
     return None
 
 

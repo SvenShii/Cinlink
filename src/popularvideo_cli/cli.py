@@ -6,12 +6,26 @@ from pathlib import Path
 import sys
 from typing import Any
 
-from .client import RuntimeClient
-from .config import Settings, load_settings, save_settings
+from .client import RuntimeClient, artifact_ref_from_path
+from .config import (
+    Settings,
+    brand_kit_payload,
+    load_settings,
+    render_options,
+    save_settings,
+    update_brand_kit,
+)
 from .dependencies import local_dependency_report, require_local_voice_separation_if_requested
 from .errors import CliError
 from .local_setup import setup_local_dependencies
-from .local_tools import burn_subtitles, mix_dubbed_audio
+from .local_tools import (
+    apply_watermark,
+    burn_subtitles,
+    clean_cut,
+    create_montage,
+    mix_dubbed_audio,
+    trim_video,
+)
 from .schemas import TOOL_SCHEMAS, list_tools
 from .workflows import add_subtitles
 
@@ -80,31 +94,31 @@ def build_parser() -> argparse.ArgumentParser:
     add_subtitles_parser.add_argument("--outline-color")
     add_subtitles_parser.add_argument("--outline-width", type=float)
     add_subtitles_parser.add_argument("--margin-v", type=int)
-    add_subtitles_parser.add_argument("--position", choices=["top", "bottom"], default="bottom")
+    add_subtitles_parser.add_argument("--position", choices=["top", "bottom"])
+    add_subtitles_parser.add_argument("--no-brand-kit", action="store_true")
     add_subtitles_parser.add_argument("--watermark-text")
     add_subtitles_parser.add_argument(
         "--watermark-position",
         choices=["top-left", "top-right", "bottom-left", "bottom-right", "center"],
-        default="top-right",
     )
     add_subtitles_parser.add_argument("--watermark-font-size", type=int)
     add_subtitles_parser.add_argument("--watermark-color")
-    add_subtitles_parser.add_argument("--watermark-opacity", type=float, default=0.72)
-    add_subtitles_parser.add_argument("--watermark-margin", type=int, default=24)
+    add_subtitles_parser.add_argument("--watermark-opacity", type=float)
+    add_subtitles_parser.add_argument("--watermark-margin", type=int)
     add_subtitles_parser.add_argument("--watermark-image", dest="watermark_image_path")
     add_subtitles_parser.add_argument(
         "--watermark-image-position",
         choices=["top-left", "top-right", "bottom-left", "bottom-right", "center"],
-        default="top-right",
     )
     add_subtitles_parser.add_argument("--watermark-image-width", type=int)
-    add_subtitles_parser.add_argument("--watermark-image-opacity", type=float, default=0.72)
-    add_subtitles_parser.add_argument("--watermark-image-margin", type=int, default=24)
+    add_subtitles_parser.add_argument("--watermark-image-opacity", type=float)
+    add_subtitles_parser.add_argument("--watermark-image-margin", type=int)
 
     dub = subparsers.add_parser("dub")
     dub.add_argument("video_path")
     dub.add_argument("--subtitle", required=True, dest="subtitle_path")
     dub.add_argument("--reference-subtitle", dest="reference_subtitle_path")
+    dub.add_argument("--reference-audio", action="append", default=[], metavar="SPEAKER_ID=PATH")
     dub.add_argument("--voice")
     dub.add_argument("--lang", default="zh")
     dub.add_argument("--out")
@@ -120,26 +134,93 @@ def build_parser() -> argparse.ArgumentParser:
     burn.add_argument("--outline-color")
     burn.add_argument("--outline-width", type=float)
     burn.add_argument("--margin-v", type=int)
-    burn.add_argument("--position", choices=["top", "bottom"], default="bottom")
+    burn.add_argument("--position", choices=["top", "bottom"])
+    burn.add_argument("--no-brand-kit", action="store_true")
     burn.add_argument("--watermark-text")
     burn.add_argument(
         "--watermark-position",
         choices=["top-left", "top-right", "bottom-left", "bottom-right", "center"],
-        default="top-right",
     )
     burn.add_argument("--watermark-font-size", type=int)
     burn.add_argument("--watermark-color")
-    burn.add_argument("--watermark-opacity", type=float, default=0.72)
-    burn.add_argument("--watermark-margin", type=int, default=24)
+    burn.add_argument("--watermark-opacity", type=float)
+    burn.add_argument("--watermark-margin", type=int)
     burn.add_argument("--watermark-image", dest="watermark_image_path")
     burn.add_argument(
         "--watermark-image-position",
         choices=["top-left", "top-right", "bottom-left", "bottom-right", "center"],
-        default="top-right",
     )
     burn.add_argument("--watermark-image-width", type=int)
-    burn.add_argument("--watermark-image-opacity", type=float, default=0.72)
-    burn.add_argument("--watermark-image-margin", type=int, default=24)
+    burn.add_argument("--watermark-image-opacity", type=float)
+    burn.add_argument("--watermark-image-margin", type=int)
+
+    watermark = subparsers.add_parser("apply-watermark")
+    watermark.add_argument("video_path")
+    watermark.add_argument("--out")
+    watermark.add_argument("--no-brand-kit", action="store_true")
+    watermark.add_argument("--watermark-text")
+    watermark.add_argument(
+        "--watermark-position",
+        choices=["top-left", "top-right", "bottom-left", "bottom-right", "center"],
+    )
+    watermark.add_argument("--watermark-font-size", type=int)
+    watermark.add_argument("--watermark-color")
+    watermark.add_argument("--watermark-opacity", type=float)
+    watermark.add_argument("--watermark-margin", type=int)
+    watermark.add_argument("--watermark-image", dest="watermark_image_path")
+    watermark.add_argument(
+        "--watermark-image-position",
+        choices=["top-left", "top-right", "bottom-left", "bottom-right", "center"],
+    )
+    watermark.add_argument("--watermark-image-width", type=int)
+    watermark.add_argument("--watermark-image-opacity", type=float)
+    watermark.add_argument("--watermark-image-margin", type=int)
+
+    trim = subparsers.add_parser("trim-video")
+    trim.add_argument("video_path")
+    trim.add_argument("--start", required=True, type=float, dest="start_sec")
+    trim.add_argument("--end", required=True, type=float, dest="end_sec")
+    trim.add_argument("--out")
+
+    montage = subparsers.add_parser("montage")
+    montage.add_argument("--clips-json", required=True, help="JSON array of {path,start_sec,end_sec} clip objects.")
+    montage.add_argument("--out")
+
+    clean = subparsers.add_parser("clean-cut")
+    clean.add_argument("video_path")
+    clean.add_argument("--out")
+    clean.add_argument("--minimum-silence", type=float, default=0.75, dest="minimum_silence_sec")
+    clean.add_argument("--noise-threshold-db", type=float, default=-35.0)
+    clean.add_argument("--retained-pause", type=float, default=0.24, dest="retained_pause_sec")
+    clean.add_argument("--minimum-removal", type=float, default=0.18, dest="minimum_removal_sec")
+
+    brand_kit = subparsers.add_parser("brand-kit")
+    brand_kit_subparsers = brand_kit.add_subparsers(dest="brand_kit_command", required=True)
+    brand_kit_subparsers.add_parser("show")
+    brand_kit_subparsers.add_parser("clear")
+    brand_set = brand_kit_subparsers.add_parser("set")
+    brand_enabled = brand_set.add_mutually_exclusive_group()
+    brand_enabled.add_argument("--enable", action="store_true")
+    brand_enabled.add_argument("--disable", action="store_true")
+    brand_set.add_argument("--font-size", type=int)
+    brand_set.add_argument("--font-name")
+    brand_set.add_argument("--font-color")
+    brand_set.add_argument("--outline-color")
+    brand_set.add_argument("--outline-width", type=float)
+    brand_set.add_argument("--margin-v", type=int)
+    brand_set.add_argument("--position", choices=["top", "bottom"])
+    brand_set.add_argument("--watermark-text")
+    brand_set.add_argument("--watermark-position", choices=["top-left", "top-right", "bottom-left", "bottom-right", "center"])
+    brand_set.add_argument("--watermark-font-size", type=int)
+    brand_set.add_argument("--watermark-color")
+    brand_set.add_argument("--watermark-opacity", type=float)
+    brand_set.add_argument("--watermark-margin", type=int)
+    brand_set.add_argument("--watermark-image", dest="watermark_image_path")
+    brand_set.add_argument("--clear-watermark-image", action="store_true")
+    brand_set.add_argument("--watermark-image-position", choices=["top-left", "top-right", "bottom-left", "bottom-right", "center"])
+    brand_set.add_argument("--watermark-image-width", type=int)
+    brand_set.add_argument("--watermark-image-opacity", type=float)
+    brand_set.add_argument("--watermark-image-margin", type=int)
 
     mix_dubbed = subparsers.add_parser("mix-dubbed-audio")
     mix_dubbed.add_argument("video_path")
@@ -177,7 +258,7 @@ def build_parser() -> argparse.ArgumentParser:
     video.add_argument("--duration", type=int, default=5)
     video.add_argument("--no-audio", action="store_false", dest="generate_audio")
     video.add_argument("--watermark", action="store_true")
-    video.add_argument("--generation-mode", choices=["text", "first_frame", "reference"], default="text")
+    video.add_argument("--generation-mode", choices=["text", "first_frame", "reference"])
     video.add_argument("--first-frame-image-url")
     video.add_argument("--reference-image-url", action="append", default=[], dest="reference_image_urls")
     video.add_argument("--reference-video-url", action="append", default=[], dest="reference_video_urls")
@@ -200,6 +281,11 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("prompt")
     run.add_argument("--conversation-id")
     run.add_argument("--context-file", action="append", default=[])
+    run.add_argument("--context-json", action="append", default=[], help="JSON context descriptor or array with public_url/cloud_file_id/metadata.")
+    run.add_argument("--client-request-id")
+    run.add_argument("--app-language")
+    run.add_argument("--hidden-context")
+    run.add_argument("--hidden-context-file")
     run.add_argument("--mode", choices=["plan", "execute"], default="execute")
     run.add_argument("--task-intent")
     run.add_argument("--task-param", action="append", default=[], metavar="KEY=VALUE")
@@ -217,6 +303,8 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--tool-call-id", required=True)
     report.add_argument("--status", choices=["done", "failed"], required=True)
     report.add_argument("--artifact-path", action="append", default=[])
+    report.add_argument("--artifact-json", action="append", default=[], help="JSON artifact object or array.")
+    report.add_argument("--artifact-metadata-json", default="{}")
     report.add_argument("--metadata-json", default="{}")
     report.add_argument("--error-code")
     report.add_argument("--error-message")
@@ -253,6 +341,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             billing_base=args.billing_base or existing.billing_base,
             timeout_sec=existing.timeout_sec,
             poll_interval_sec=existing.poll_interval_sec,
+            brand_kit=existing.brand_kit,
         )
         if not settings.api_key:
             raise CliError("invalid_input", "Pass --api-key or set CINLINK_API_KEY.")
@@ -286,6 +375,17 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             interactive=not bool(getattr(args, "_json_output", False)),
         )
 
+    if args.command == "brand-kit":
+        settings = load_settings(allow_missing_api_key=True)
+        if args.brand_kit_command == "show":
+            return {"status": "done", "brand_kit": brand_kit_payload(settings)}
+        if args.brand_kit_command == "clear":
+            brand_kit = update_brand_kit(settings, {"enabled": False}, clear=True)
+            return {"status": "done", "brand_kit": brand_kit}
+        changes = _brand_kit_changes(args)
+        brand_kit = update_brand_kit(settings, changes)
+        return {"status": "done", "brand_kit": brand_kit}
+
     if args.command == "tools":
         if args.tools_command == "list":
             return {"tools": list_tools()}
@@ -299,7 +399,16 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "agent" and args.agent_command == "run":
         require_local_voice_separation_if_requested(args.prompt)
 
-    settings = load_settings(allow_missing_api_key=args.command in {"burn", "mix-dubbed-audio"})
+    local_only_commands = {
+        "apply-watermark",
+        "brand-kit",
+        "burn",
+        "clean-cut",
+        "mix-dubbed-audio",
+        "montage",
+        "trim-video",
+    }
+    settings = load_settings(allow_missing_api_key=args.command in local_only_commands)
     client = RuntimeClient(settings)
 
     if args.command == "transcribe":
@@ -307,6 +416,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
     if args.command == "translate":
         return client.translate(Path(args.input_path), from_lang=args.from_lang, to_lang=args.to_lang, bilingual=args.bilingual, delivery=args.delivery, out=_path_or_none(args.out), timeout=args.timeout)
     if args.command == "add-subtitles":
+        render = _render_options_from_args(args, settings)
         return add_subtitles(
             client,
             Path(args.video_path),
@@ -316,58 +426,95 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             bilingual=args.bilingual,
             out=_path_or_none(args.out),
             timeout=args.timeout,
-            font_size=args.font_size,
-            font_name=args.font_name,
-            font_color=args.font_color,
-            outline_color=args.outline_color,
-            outline_width=args.outline_width,
-            margin_v=args.margin_v,
-            position=args.position,
-            watermark_text=args.watermark_text,
-            watermark_position=args.watermark_position,
-            watermark_font_size=args.watermark_font_size,
-            watermark_color=args.watermark_color,
-            watermark_opacity=args.watermark_opacity,
-            watermark_margin=args.watermark_margin,
-            watermark_image_path=_path_or_none(args.watermark_image_path),
-            watermark_image_position=args.watermark_image_position,
-            watermark_image_width=args.watermark_image_width,
-            watermark_image_opacity=args.watermark_image_opacity,
-            watermark_image_margin=args.watermark_image_margin,
+            font_size=render["font_size"],
+            font_name=render["font_name"],
+            font_color=render["font_color"],
+            outline_color=render["outline_color"],
+            outline_width=render["outline_width"],
+            margin_v=render["margin_v"],
+            position=render["position"],
+            watermark_text=render["watermark_text"],
+            watermark_position=render["watermark_position"],
+            watermark_font_size=render["watermark_font_size"],
+            watermark_color=render["watermark_color"],
+            watermark_opacity=render["watermark_opacity"],
+            watermark_margin=render["watermark_margin"],
+            watermark_image_path=_path_or_none(render["watermark_image_path"]),
+            watermark_image_position=render["watermark_image_position"],
+            watermark_image_width=render["watermark_image_width"],
+            watermark_image_opacity=render["watermark_image_opacity"],
+            watermark_image_margin=render["watermark_image_margin"],
         )
     if args.command == "dub":
         return client.dub(
             Path(args.video_path),
             Path(args.subtitle_path),
             reference_subtitle_path=_path_or_none(args.reference_subtitle_path),
+            reference_audio_paths=_parse_path_dict(args.reference_audio, "--reference-audio"),
             voice=args.voice,
             language=args.lang,
             out=_path_or_none(args.out),
             timeout=args.timeout,
         )
     if args.command == "burn":
+        render = _render_options_from_args(args, settings)
         return burn_subtitles(
             Path(args.video_path),
             Path(args.subtitle_path),
             out=_path_or_none(args.out),
-            font_size=args.font_size,
-            font_name=args.font_name,
-            font_color=args.font_color,
-            outline_color=args.outline_color,
-            outline_width=args.outline_width,
-            margin_v=args.margin_v,
-            position=args.position,
-            watermark_text=args.watermark_text,
-            watermark_position=args.watermark_position,
-            watermark_font_size=args.watermark_font_size,
-            watermark_color=args.watermark_color,
-            watermark_opacity=args.watermark_opacity,
-            watermark_margin=args.watermark_margin,
-            watermark_image_path=_path_or_none(args.watermark_image_path),
-            watermark_image_position=args.watermark_image_position,
-            watermark_image_width=args.watermark_image_width,
-            watermark_image_opacity=args.watermark_image_opacity,
-            watermark_image_margin=args.watermark_image_margin,
+            font_size=render["font_size"],
+            font_name=render["font_name"],
+            font_color=render["font_color"],
+            outline_color=render["outline_color"],
+            outline_width=render["outline_width"],
+            margin_v=render["margin_v"],
+            position=render["position"],
+            watermark_text=render["watermark_text"],
+            watermark_position=render["watermark_position"],
+            watermark_font_size=render["watermark_font_size"],
+            watermark_color=render["watermark_color"],
+            watermark_opacity=render["watermark_opacity"],
+            watermark_margin=render["watermark_margin"],
+            watermark_image_path=_path_or_none(render["watermark_image_path"]),
+            watermark_image_position=render["watermark_image_position"],
+            watermark_image_width=render["watermark_image_width"],
+            watermark_image_opacity=render["watermark_image_opacity"],
+            watermark_image_margin=render["watermark_image_margin"],
+        )
+    if args.command == "apply-watermark":
+        render = _render_options_from_args(args, settings)
+        return apply_watermark(
+            Path(args.video_path),
+            out=_path_or_none(args.out),
+            watermark_text=render["watermark_text"],
+            watermark_position=render["watermark_position"],
+            watermark_font_size=render["watermark_font_size"],
+            watermark_color=render["watermark_color"],
+            watermark_opacity=render["watermark_opacity"],
+            watermark_margin=render["watermark_margin"],
+            watermark_image_path=_path_or_none(render["watermark_image_path"]),
+            watermark_image_position=render["watermark_image_position"],
+            watermark_image_width=render["watermark_image_width"],
+            watermark_image_opacity=render["watermark_image_opacity"],
+            watermark_image_margin=render["watermark_image_margin"],
+        )
+    if args.command == "trim-video":
+        return trim_video(
+            Path(args.video_path),
+            start_sec=args.start_sec,
+            end_sec=args.end_sec,
+            out=_path_or_none(args.out),
+        )
+    if args.command == "montage":
+        return create_montage(_parse_json_array(args.clips_json, "--clips-json"), out=_path_or_none(args.out))
+    if args.command == "clean-cut":
+        return clean_cut(
+            Path(args.video_path),
+            out=_path_or_none(args.out),
+            minimum_silence_sec=args.minimum_silence_sec,
+            noise_threshold_db=args.noise_threshold_db,
+            retained_pause_sec=args.retained_pause_sec,
+            minimum_removal_sec=args.minimum_removal_sec,
         )
     if args.command == "mix-dubbed-audio":
         return mix_dubbed_audio(
@@ -422,14 +569,20 @@ def run_agent_command(args: argparse.Namespace, client: RuntimeClient) -> dict[s
         task_parameters = _parse_string_dict(args.task_parameters_json, "--task-parameters-json")
         task_parameters.update(_parse_key_value_pairs(args.task_param, "--task-param"))
         conversation_state = _parse_string_dict(args.conversation_state_json, "--conversation-state-json")
+        hidden_context = _combined_hidden_context(args.hidden_context, args.hidden_context_file)
+        context_descriptors = _parse_json_objects(args.context_json, "--context-json")
         created = client.create_agent_run(
             args.prompt,
             conversation_id=args.conversation_id,
             context_files=[Path(item) for item in args.context_file],
+            context_descriptors=context_descriptors,
             mode=args.mode,
             task_intent=args.task_intent,
             task_parameters=task_parameters,
             conversation_state=conversation_state,
+            client_request_id=args.client_request_id,
+            app_language=args.app_language,
+            hidden_context=hidden_context,
         )
         if args.wait and created.get("run_id"):
             return client.wait_for_agent_run(str(created["run_id"]), timeout=args.timeout)
@@ -440,10 +593,15 @@ def run_agent_command(args: argparse.Namespace, client: RuntimeClient) -> dict[s
         return client.list_local_tool_calls(args.run_id, device_id=args.device_id)
     if args.agent_command == "report-tool-result":
         metadata = _parse_json_object(args.metadata_json)
+        artifact_metadata = _parse_json_object(args.artifact_metadata_json)
+        for key in ("artifact_role", "producer_run_id", "producer_step", "source_language", "target_language"):
+            if key in metadata and key not in artifact_metadata:
+                artifact_metadata[key] = metadata[key]
         artifacts = [
-            {"id": None, "name": Path(item).name, "kind": "file", "path": str(Path(item).expanduser().resolve()), "metadata": {}}
+            artifact_ref_from_path(Path(item), metadata=artifact_metadata)
             for item in args.artifact_path
         ]
+        artifacts.extend(_parse_report_artifacts(args.artifact_json, artifact_metadata))
         result = {
             "tool_call_id": args.tool_call_id,
             "status": args.status,
@@ -470,6 +628,61 @@ def _parse_json_object(text: str) -> dict[str, Any]:
     return payload
 
 
+def _parse_json_array(text: str, flag: str) -> list[Any]:
+    try:
+        payload = json.loads(text)
+    except json.JSONDecodeError as exc:
+        raise CliError("invalid_input", f"{flag} must be a JSON array.") from exc
+    if not isinstance(payload, list):
+        raise CliError("invalid_input", f"{flag} must be a JSON array.")
+    return payload
+
+
+def _parse_json_objects(values: list[str], flag: str) -> list[dict[str, Any]]:
+    objects: list[dict[str, Any]] = []
+    for text in values:
+        try:
+            payload = json.loads(text)
+        except json.JSONDecodeError as exc:
+            raise CliError("invalid_input", f"{flag} must contain a JSON object or array.") from exc
+        items = payload if isinstance(payload, list) else [payload]
+        if not all(isinstance(item, dict) for item in items):
+            raise CliError("invalid_input", f"{flag} must contain only JSON objects.")
+        objects.extend(items)
+    return objects
+
+
+def _parse_report_artifacts(values: list[str], shared_metadata: dict[str, Any]) -> list[dict[str, Any]]:
+    artifacts: list[dict[str, Any]] = []
+    for item in _parse_json_objects(values, "--artifact-json"):
+        raw_path = item.get("path") or item.get("local_path")
+        item_metadata = item.get("metadata")
+        if item_metadata is not None and not isinstance(item_metadata, dict):
+            raise CliError("invalid_input", "--artifact-json metadata must be a JSON object.")
+        metadata = {**shared_metadata, **(item_metadata or {})}
+        if raw_path:
+            artifact = artifact_ref_from_path(
+                Path(str(raw_path)),
+                kind=str(item["kind"]) if item.get("kind") else None,
+                metadata=metadata,
+            )
+        else:
+            name = str(item.get("name") or "")
+            if not name:
+                raise CliError("invalid_input", "--artifact-json requires path or name.")
+            artifact = {
+                "id": item.get("id"),
+                "name": name,
+                "kind": str(item.get("kind") or "other"),
+                "metadata": {str(key): str(value) for key, value in metadata.items() if value is not None},
+            }
+        for key in ("id", "url", "cloud_file_id"):
+            if item.get(key) is not None:
+                artifact[key] = str(item[key])
+        artifacts.append(artifact)
+    return artifacts
+
+
 def _parse_string_dict(text: str, flag: str) -> dict[str, str]:
     try:
         payload = json.loads(text)
@@ -491,6 +704,102 @@ def _parse_key_value_pairs(values: list[str], flag: str) -> dict[str, str]:
             raise CliError("invalid_input", f"{flag} must include a non-empty key.")
         parsed[key] = value
     return parsed
+
+
+def _parse_path_dict(values: list[str], flag: str) -> dict[str, Path]:
+    parsed: dict[str, Path] = {}
+    for item in values:
+        if "=" not in item:
+            raise CliError("invalid_input", f"{flag} must be formatted as KEY=PATH.")
+        key, value = item.split("=", 1)
+        key = key.strip()
+        if not key:
+            raise CliError("invalid_input", f"{flag} must include a non-empty key.")
+        if not value:
+            raise CliError("invalid_input", f"{flag} must include a non-empty path.")
+        parsed[key] = Path(value)
+    return parsed
+
+
+def _render_options_from_args(args: argparse.Namespace, settings: Settings) -> dict[str, Any]:
+    overrides = {
+        key: getattr(args, key, None)
+        for key in (
+            "font_size",
+            "font_name",
+            "font_color",
+            "outline_color",
+            "outline_width",
+            "margin_v",
+            "position",
+            "watermark_text",
+            "watermark_position",
+            "watermark_font_size",
+            "watermark_color",
+            "watermark_opacity",
+            "watermark_margin",
+            "watermark_image_path",
+            "watermark_image_position",
+            "watermark_image_width",
+            "watermark_image_opacity",
+            "watermark_image_margin",
+        )
+    }
+    return render_options(
+        settings,
+        overrides,
+        use_brand_kit=not bool(getattr(args, "no_brand_kit", False)),
+    )
+
+
+def _brand_kit_changes(args: argparse.Namespace) -> dict[str, Any]:
+    changes = {
+        key: getattr(args, key)
+        for key in (
+            "font_size",
+            "font_name",
+            "font_color",
+            "outline_color",
+            "outline_width",
+            "margin_v",
+            "position",
+            "watermark_text",
+            "watermark_position",
+            "watermark_font_size",
+            "watermark_color",
+            "watermark_opacity",
+            "watermark_margin",
+            "watermark_image_path",
+            "watermark_image_position",
+            "watermark_image_width",
+            "watermark_image_opacity",
+            "watermark_image_margin",
+        )
+        if getattr(args, key, None) is not None
+    }
+    if args.enable:
+        changes["enabled"] = True
+    elif args.disable:
+        changes["enabled"] = False
+    if args.clear_watermark_image:
+        changes["watermark_image_path"] = None
+    if changes.get("watermark_image_path"):
+        changes["watermark_image_path"] = str(Path(str(changes["watermark_image_path"])).expanduser().resolve())
+    if not changes:
+        raise CliError("invalid_input", "Pass at least one Brand Kit setting.")
+    return changes
+
+
+def _combined_hidden_context(inline_context: str | None, context_file: str | None) -> str | None:
+    parts: list[str] = []
+    if inline_context:
+        parts.append(inline_context)
+    if context_file:
+        try:
+            parts.append(Path(context_file).expanduser().read_text(encoding="utf-8"))
+        except OSError as exc:
+            raise CliError("invalid_input", f"--hidden-context-file could not be read: {exc}") from exc
+    return "\n".join(part for part in parts if part).strip() or None
 
 
 if __name__ == "__main__":

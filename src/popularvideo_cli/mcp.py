@@ -6,11 +6,25 @@ import sys
 from typing import Any
 
 from .client import RuntimeClient
-from .config import Settings, load_settings, save_settings
+from .config import (
+    Settings,
+    brand_kit_payload,
+    load_settings,
+    render_options,
+    save_settings,
+    update_brand_kit,
+)
 from .dependencies import local_dependency_report, require_local_voice_separation_if_requested
 from .errors import CliError
 from .local_setup import setup_local_dependencies
-from .local_tools import burn_subtitles, mix_dubbed_audio
+from .local_tools import (
+    apply_watermark,
+    burn_subtitles,
+    clean_cut,
+    create_montage,
+    mix_dubbed_audio,
+    trim_video,
+)
 from .schemas import TOOL_SCHEMAS
 from .workflows import add_subtitles
 
@@ -93,6 +107,7 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             billing_base=args.get("billing_base") or existing.billing_base,
             timeout_sec=existing.timeout_sec,
             poll_interval_sec=existing.poll_interval_sec,
+            brand_kit=existing.brand_kit,
         )
         if not settings.api_key:
             raise CliError("invalid_input", "Pass api_key or set CINLINK_API_KEY.")
@@ -107,7 +122,34 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             skip_voice_separation=bool(args.get("skip_voice_separation", False)),
             interactive=False,
         )
-    settings = load_settings(allow_missing_api_key=name in {"doctor", "burn", "mix_dubbed_audio"})
+    if name == "brand_kit":
+        settings = load_settings(allow_missing_api_key=True)
+        action = str(args.get("action") or "show")
+        if action == "show":
+            return {"status": "done", "brand_kit": brand_kit_payload(settings)}
+        if action == "clear":
+            return {"status": "done", "brand_kit": update_brand_kit(settings, {"enabled": False}, clear=True)}
+        if action != "set":
+            raise CliError("invalid_input", "brand_kit action must be show, set, or clear.")
+        changes = {
+            key: value
+            for key, value in args.items()
+            if key not in {"action"} and value is not None
+        }
+        if not changes:
+            raise CliError("invalid_input", "Brand Kit set requires at least one setting.")
+        return {"status": "done", "brand_kit": update_brand_kit(settings, changes)}
+    local_only_tools = {
+        "apply_watermark",
+        "brand_kit",
+        "burn",
+        "clean_cut",
+        "doctor",
+        "mix_dubbed_audio",
+        "montage",
+        "trim_video",
+    }
+    settings = load_settings(allow_missing_api_key=name in local_only_tools)
     client = RuntimeClient(settings)
     if name == "doctor":
         payload: dict[str, Any] = {"local_dependencies": local_dependency_report()}
@@ -129,6 +171,7 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             timeout=args.get("timeout"),
         )
     if name == "add_subtitles":
+        render = _render_options(args, settings)
         return add_subtitles(
             client,
             Path(args["video_path"]),
@@ -138,58 +181,98 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             bilingual=bool(args.get("bilingual", False)),
             out=_path(args.get("out")),
             timeout=args.get("timeout"),
-            font_size=args.get("font_size"),
-            font_name=args.get("font_name"),
-            font_color=args.get("font_color"),
-            outline_color=args.get("outline_color"),
-            outline_width=args.get("outline_width"),
-            margin_v=args.get("margin_v"),
-            position=args.get("position", "bottom"),
-            watermark_text=args.get("watermark_text"),
-            watermark_position=args.get("watermark_position", "top-right"),
-            watermark_font_size=args.get("watermark_font_size"),
-            watermark_color=args.get("watermark_color"),
-            watermark_opacity=float(args.get("watermark_opacity", 0.72)),
-            watermark_margin=int(args.get("watermark_margin", 24)),
-            watermark_image_path=_path(args.get("watermark_image_path")),
-            watermark_image_position=args.get("watermark_image_position", "top-right"),
-            watermark_image_width=args.get("watermark_image_width"),
-            watermark_image_opacity=float(args.get("watermark_image_opacity", 0.72)),
-            watermark_image_margin=int(args.get("watermark_image_margin", 24)),
+            font_size=render["font_size"],
+            font_name=render["font_name"],
+            font_color=render["font_color"],
+            outline_color=render["outline_color"],
+            outline_width=render["outline_width"],
+            margin_v=render["margin_v"],
+            position=render["position"],
+            watermark_text=render["watermark_text"],
+            watermark_position=render["watermark_position"],
+            watermark_font_size=render["watermark_font_size"],
+            watermark_color=render["watermark_color"],
+            watermark_opacity=render["watermark_opacity"],
+            watermark_margin=render["watermark_margin"],
+            watermark_image_path=_path(render["watermark_image_path"]),
+            watermark_image_position=render["watermark_image_position"],
+            watermark_image_width=render["watermark_image_width"],
+            watermark_image_opacity=render["watermark_image_opacity"],
+            watermark_image_margin=render["watermark_image_margin"],
         )
     if name == "dub":
         return client.dub(
             Path(args["video_path"]),
             Path(args["subtitle_path"]),
             reference_subtitle_path=_path(args.get("reference_subtitle_path")),
+            reference_audio_paths=_path_dict(args.get("reference_audio_paths")),
             voice=args.get("voice"),
             language=args.get("language", "zh"),
             out=_path(args.get("out")),
             timeout=args.get("timeout"),
         )
     if name == "burn":
+        render = _render_options(args, settings)
         return burn_subtitles(
             Path(args["video_path"]),
             Path(args["subtitle_path"]),
             out=_path(args.get("out")),
-            font_size=args.get("font_size"),
-            font_name=args.get("font_name"),
-            font_color=args.get("font_color"),
-            outline_color=args.get("outline_color"),
-            outline_width=args.get("outline_width"),
-            margin_v=args.get("margin_v"),
-            position=args.get("position", "bottom"),
-            watermark_text=args.get("watermark_text"),
-            watermark_position=args.get("watermark_position", "top-right"),
-            watermark_font_size=args.get("watermark_font_size"),
-            watermark_color=args.get("watermark_color"),
-            watermark_opacity=float(args.get("watermark_opacity", 0.72)),
-            watermark_margin=int(args.get("watermark_margin", 24)),
-            watermark_image_path=_path(args.get("watermark_image_path")),
-            watermark_image_position=args.get("watermark_image_position", "top-right"),
-            watermark_image_width=args.get("watermark_image_width"),
-            watermark_image_opacity=float(args.get("watermark_image_opacity", 0.72)),
-            watermark_image_margin=int(args.get("watermark_image_margin", 24)),
+            font_size=render["font_size"],
+            font_name=render["font_name"],
+            font_color=render["font_color"],
+            outline_color=render["outline_color"],
+            outline_width=render["outline_width"],
+            margin_v=render["margin_v"],
+            position=render["position"],
+            watermark_text=render["watermark_text"],
+            watermark_position=render["watermark_position"],
+            watermark_font_size=render["watermark_font_size"],
+            watermark_color=render["watermark_color"],
+            watermark_opacity=render["watermark_opacity"],
+            watermark_margin=render["watermark_margin"],
+            watermark_image_path=_path(render["watermark_image_path"]),
+            watermark_image_position=render["watermark_image_position"],
+            watermark_image_width=render["watermark_image_width"],
+            watermark_image_opacity=render["watermark_image_opacity"],
+            watermark_image_margin=render["watermark_image_margin"],
+        )
+    if name == "apply_watermark":
+        render = _render_options(args, settings)
+        return apply_watermark(
+            Path(args["video_path"]),
+            out=_path(args.get("out")),
+            watermark_text=render["watermark_text"],
+            watermark_position=render["watermark_position"],
+            watermark_font_size=render["watermark_font_size"],
+            watermark_color=render["watermark_color"],
+            watermark_opacity=render["watermark_opacity"],
+            watermark_margin=render["watermark_margin"],
+            watermark_image_path=_path(render["watermark_image_path"]),
+            watermark_image_position=render["watermark_image_position"],
+            watermark_image_width=render["watermark_image_width"],
+            watermark_image_opacity=render["watermark_image_opacity"],
+            watermark_image_margin=render["watermark_image_margin"],
+        )
+    if name == "trim_video":
+        return trim_video(
+            Path(args["video_path"]),
+            start_sec=float(args["start_sec"]),
+            end_sec=float(args["end_sec"]),
+            out=_path(args.get("out")),
+        )
+    if name == "montage":
+        clips = args.get("clips")
+        if not isinstance(clips, list):
+            raise CliError("invalid_input", "montage clips must be a JSON array.")
+        return create_montage(clips, out=_path(args.get("out")))
+    if name == "clean_cut":
+        return clean_cut(
+            Path(args["video_path"]),
+            out=_path(args.get("out")),
+            minimum_silence_sec=float(args.get("minimum_silence_sec", 0.75)),
+            noise_threshold_db=float(args.get("noise_threshold_db", -35.0)),
+            retained_pause_sec=float(args.get("retained_pause_sec", 0.24)),
+            minimum_removal_sec=float(args.get("minimum_removal_sec", 0.18)),
         )
     if name == "mix_dubbed_audio":
         return mix_dubbed_audio(
@@ -222,7 +305,7 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             duration=int(args.get("duration", 5)),
             generate_audio=bool(args.get("generate_audio", True)),
             watermark=bool(args.get("watermark", False)),
-            generation_mode=args.get("generation_mode", "text"),
+            generation_mode=args.get("generation_mode"),
             first_frame_image_url=args.get("first_frame_image_url"),
             reference_image_urls=args.get("reference_image_urls") or [],
             reference_video_urls=args.get("reference_video_urls") or [],
@@ -240,14 +323,21 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             context_files=args.get("context_files") or [],
         )
     if name == "agent_run":
+        context_descriptors = args.get("context_descriptors")
+        if context_descriptors is not None and not isinstance(context_descriptors, list):
+            raise CliError("invalid_input", "context_descriptors must be a JSON array.")
         created = client.create_agent_run(
             args["prompt"],
             conversation_id=args.get("conversation_id"),
             context_files=[Path(item) for item in args.get("context_file", [])],
+            context_descriptors=context_descriptors or [],
             mode=args.get("mode", "execute"),
             task_intent=args.get("task_intent"),
             task_parameters=_string_dict(args.get("task_parameters")),
             conversation_state=_string_dict(args.get("conversation_state")),
+            client_request_id=args.get("client_request_id"),
+            app_language=args.get("app_language"),
+            hidden_context=args.get("hidden_context"),
         )
         if args.get("wait") and created.get("run_id"):
             return client.wait_for_agent_run(str(created["run_id"]), timeout=_float_or_none(args.get("timeout")))
@@ -265,10 +355,44 @@ def _string_dict(value: Any) -> dict[str, str]:
     return {str(key): str(item) for key, item in value.items() if item is not None}
 
 
+def _path_dict(value: Any) -> dict[str, Path]:
+    if not isinstance(value, dict):
+        return {}
+    return {str(key): Path(str(item)) for key, item in value.items() if item is not None}
+
+
 def _float_or_none(value: Any) -> float | None:
     if value is None:
         return None
     return float(value)
+
+
+def _render_options(args: dict[str, Any], settings: Settings) -> dict[str, Any]:
+    keys = (
+        "font_size",
+        "font_name",
+        "font_color",
+        "outline_color",
+        "outline_width",
+        "margin_v",
+        "position",
+        "watermark_text",
+        "watermark_position",
+        "watermark_font_size",
+        "watermark_color",
+        "watermark_opacity",
+        "watermark_margin",
+        "watermark_image_path",
+        "watermark_image_position",
+        "watermark_image_width",
+        "watermark_image_opacity",
+        "watermark_image_margin",
+    )
+    return render_options(
+        settings,
+        {key: args.get(key) for key in keys},
+        use_brand_kit=not bool(args.get("no_brand_kit", False)),
+    )
 
 
 def _error_response(request_id: Any, code: str, message: str, details: dict[str, Any] | None = None) -> dict[str, Any]:

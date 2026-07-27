@@ -23,7 +23,7 @@ def setup_local_dependencies(
     actions: list[dict[str, Any]] = []
 
     if not skip_ffmpeg:
-        if before["ffmpeg"].get("subtitle_burn_available"):
+        if before["ffmpeg"].get("subtitle_burn_available") and before["ffprobe"].get("available"):
             actions.append(
                 {
                     "component": "ffmpeg",
@@ -35,7 +35,7 @@ def setup_local_dependencies(
             actions.append(
                 _maybe_install_component(
                     component="ffmpeg",
-                    reason="CinLink uses ffmpeg for subtitle burn-in, local audio extraction, local audio mixing, ffprobe-style inspection, and local voice-separation preprocessing.",
+                    reason="CinLink uses ffmpeg/ffprobe for subtitle burn-in, local audio extraction/mixing, Clean Cut, trimming, montage, watermarking, media inspection, and local voice-separation preprocessing.",
                     commands=_ffmpeg_install_commands(),
                     assume_yes=assume_yes,
                     dry_run=dry_run,

@@ -22,7 +22,7 @@ After the CLI is installed, run the local dependency setup:
 cinlink setup-local-deps
 ```
 
-This checks local `ffmpeg` for subtitle burn-in/audio work and prompts before using a platform package manager to install it. It also offers optional `demucs` and `soundfile` for local voice separation/background preservation. For non-interactive agents, first show a dry run:
+This checks local `ffmpeg`/`ffprobe` for subtitle burn-in, audio work, Clean Cut, trimming, montage, and watermark export, then prompts before using a platform package manager to install it. It also offers optional `demucs` and `soundfile` for local voice separation/background preservation. For non-interactive agents, first show a dry run:
 
 ```bash
 cinlink --json setup-local-deps --dry-run --with-voice-separation
@@ -66,6 +66,8 @@ cinlink --json doctor
 
 `doctor` reports API key presence, runtime health, local `ffmpeg`, Demucs, and `soundfile` status. If voice separation or background preservation is requested and dependencies are missing, ask before installing anything.
 
+Brand Kit settings are stored in the same user-level JSON config as the API setup, not in `.env` or the installed skill directory. API-key onboarding preserves existing Brand Kit settings.
+
 ## JSON Tool Bridge
 
 For agents that prefer one stable wrapper, use:
@@ -93,6 +95,8 @@ cinlink --json tools list
 cinlink --json tools schema transcribe
 cinlink --json tools schema dub
 cinlink --json tools schema setup_local_deps
+cinlink --json tools schema clean_cut
+cinlink --json tools schema brand_kit
 ```
 
 Use JSON mode for all agent/automation calls.
