@@ -125,7 +125,7 @@ cinlink --json add-subtitles "D:\videos\demo.mp4"
 cinlink --json add-subtitles "D:\videos\demo.mp4" --target-lang en
 cinlink --json transcribe "D:\videos\demo.mp4"
 cinlink --json translate "D:\videos\demo.srt" --to en
-cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --lang en
+cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --reference-subtitle "D:\videos\source.reference.srt" --lang en
 cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --lang en --reference-audio "speaker_0=D:\voices\speaker.wav"
 cinlink --json burn "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt"
 cinlink --json clean-cut "D:\videos\demo.mp4"
@@ -148,11 +148,14 @@ cinlink --json export-editor-project "D:\videos\demo.mp4" --target premiere --su
 cinlink --json agent run "Summarize this video into five selling points" --context-file "D:\videos\demo.mp4" --app-language en
 cinlink --json agent run "Add English subtitles and return the subtitled video" --context-file "D:\videos\demo.mp4" --client-request-id request_123 --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait --include-events
 cinlink --json agent poll run_xxx
+cinlink --json agent clarify run_xxx --clarification-id translation_mode:0 --value voice --wait
 cinlink --json agent events run_xxx
 cinlink --json agent local-tools run_xxx
 ```
 
-The current hosted runtime keeps full user videos off the server for transcription, media translation, summarization, shortening, dubbing, and visual deconstruction. Audio workflows upload only locally extracted audio; deconstruction uploads only sampled frames. Image generation accepts up to three local/remote references; video generation accepts up to nine image references. Local images are uploaded through the authenticated reference-image endpoint. `cinlink dub` also supports repeated `--reference-audio speaker_id=path` values for speaker-specific voice references.
+The current hosted runtime keeps full user videos off the server for transcription, media translation, summarization, shortening, dubbing, and visual deconstruction. Audio workflows upload only locally extracted audio; deconstruction uploads only sampled frames. Image generation accepts up to three local/remote references; video generation accepts up to nine image references. Local images are uploaded through the authenticated reference-image endpoint. `cinlink dub` auto-discovers sibling `source.reference.srt`, `subtitle.reference.srt`, or `source.srt` when `--reference-subtitle` is omitted, and supports repeated `--reference-audio speaker_id=path` values.
+
+When an Agent result has `status=requires_user_input` and a non-empty `clarifications` array, show its question/options to the user and continue with `agent clarify`. The command preserves the original task frame, context files, and compound execution plan. Do not use it for install/authorization prompts that have no structured clarification.
 
 ## Stable JSON Contract
 
@@ -179,6 +182,8 @@ Common error codes:
 - `processing_failed`
 - `timeout`
 - `internal_error`
+
+Failed hosted jobs can also return safe `error.details` fields such as `processing_stage`, `provider`, `request_id`, and `retryable`. Retry automatically only when `retryable` is `true`.
 
 ## MCP
 

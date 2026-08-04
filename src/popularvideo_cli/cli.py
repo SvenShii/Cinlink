@@ -375,6 +375,19 @@ def build_parser() -> argparse.ArgumentParser:
         help="Include public planning and reasoning events in the completed response.",
     )
     run.add_argument("--timeout", type=float)
+    clarify = agent_subparsers.add_parser("clarify")
+    clarify.add_argument("run_id")
+    clarify.add_argument("--clarification-id")
+    clarify.add_argument("--value")
+    clarify.add_argument("--answer")
+    clarify.add_argument("--client-request-id")
+    clarify.add_argument("--wait", action="store_true")
+    clarify.add_argument(
+        "--include-events",
+        action="store_true",
+        help="Include public planning and reasoning events in the completed response.",
+    )
+    clarify.add_argument("--timeout", type=float)
     poll = agent_subparsers.add_parser("poll")
     poll.add_argument("run_id")
     events = agent_subparsers.add_parser("events")
@@ -737,6 +750,17 @@ def run_agent_command(args: argparse.Namespace, client: RuntimeClient) -> dict[s
                 include_events=args.include_events,
             )
         return created
+    if args.agent_command == "clarify":
+        return client.continue_agent_clarification(
+            args.run_id,
+            clarification_id=args.clarification_id,
+            value=args.value,
+            answer=args.answer,
+            client_request_id=args.client_request_id,
+            wait=args.wait,
+            include_events=args.include_events,
+            timeout=args.timeout,
+        )
     if args.agent_command == "poll":
         return client.get_agent_run(args.run_id)
     if args.agent_command == "events":

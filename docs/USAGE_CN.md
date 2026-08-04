@@ -124,6 +124,7 @@ cinlink --json tools list
 ```powershell
 cinlink --json tools schema transcribe
 cinlink --json tools schema agent_run
+cinlink --json tools schema agent_clarify
 cinlink --json tools schema setup_local_deps
 cinlink --json tools schema clean_cut
 cinlink --json tools schema brand_kit
@@ -144,6 +145,14 @@ cinlink --json nlu "把这个视频翻译成英文字幕" --has-video
 cinlink --json agent run "把这个视频总结成 5 条卖点" --context-file "D:\videos\demo.mp4" --app-language zh
 cinlink --json agent run "给这个视频加英文字幕，并输出带字幕视频" --context-file "D:\videos\demo.mp4" --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait
 ```
+
+如果结果为 `requires_user_input` 且包含 `clarifications`，先把问题和选项展示给用户，再用用户选择续跑原任务：
+
+```powershell
+cinlink --json agent clarify run_xxx --clarification-id translation_mode:0 --value voice --wait
+```
+
+文本澄清使用 `--answer`。只有一个澄清时可以省略 `--clarification-id`。该命令会保留原会话、任务框架、上下文文件和复合执行计划；没有 `clarifications` 的安装/授权确认不要调用它。
 
 等待任务时可用 `--include-events` 收集公开的规划/推理进度，也可以单独读取 SSE：
 
@@ -185,7 +194,7 @@ cinlink --json <command>
 ```powershell
 cinlink --json transcribe "D:\videos\demo.mp4"
 cinlink --json translate "D:\videos\demo.srt" --to en
-cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --lang en
+cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --reference-subtitle "D:\videos\source.reference.srt" --lang en
 cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --lang en --reference-audio "speaker_0=D:\voices\speaker.wav"
 cinlink --json burn "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt"
 cinlink --json clean-cut "D:\videos\demo.mp4"
@@ -212,7 +221,7 @@ cinlink --json export-audio \"D:\\videos\\demo.mp4\" --format mp3
 cinlink --json export-editor-project \"D:\\videos\\demo.mp4\" --target premiere --subtitle \"D:\\videos\\demo.srt\"
 ```
 
-新版 hosted runtime 在转写、视频翻译、总结、短视频规划、配音和视觉拆解流程中都不接收完整视频。音频工作流只上传本地抽取的音频；视频拆解只上传采样帧。图片生成最多接收 3 张参考图，视频生成最多接收 9 张参考图；URL 或本地路径均可，本地图片会经鉴权的参考图接口上传。多说话人配音参考音频用重复的 `--reference-audio speaker_id=path`。
+新版 hosted runtime 在转写、视频翻译、总结、短视频规划、配音和视觉拆解流程中都不接收完整视频。音频工作流只上传本地抽取的音频；视频拆解只上传采样帧。图片生成最多接收 3 张参考图，视频生成最多接收 9 张参考图；URL 或本地路径均可，本地图片会经鉴权的参考图接口上传。配音应携带与译文逐条对齐的原文参考字幕；未显式传入时 CLI 会依次寻找同目录下的 `source.reference.srt`、`subtitle.reference.srt`、`source.srt`。多说话人配音参考音频用重复的 `--reference-audio speaker_id=path`。
 
 Agent 同时收到一个视频和一份有效的 SRT/VTT/ASS 时，CLI 会把字幕标记为可复用并绑定来源视频，避免重复转写。有多份字幕或图片时，应通过 `--context-json` 保留 id、语言、artifact role、来源 lineage、`cloud_file_id` 和 `public_url`。如果任务同时要求缩短和配音，要先在原始完整时间轴上完成配音合成，再剪高光，不能把完整配音音轨直接混入已经缩短的视频。
 
@@ -289,6 +298,7 @@ export_video
 export_audio
 export_editor_project
 agent_events
+agent_clarify
 summarize
 shorten
 image
@@ -341,6 +351,8 @@ processing_failed    任务失败
 timeout              等待超时
 internal_error       CLI 内部异常
 ```
+
+托管任务失败时还可能包含安全的 `error.details`，例如 `processing_stage`、`provider`、`request_id` 和 `retryable`。向用户展示公开的 `code`/`message`，仅当 `retryable=true` 时自动重试。
 
 ## 9. 什么时候用 CLI，什么时候用 MCP
 

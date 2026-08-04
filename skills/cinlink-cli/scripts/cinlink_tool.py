@@ -36,6 +36,7 @@ def main() -> int:
             "export_editor_project",
             "nlu",
             "agent_run",
+            "agent_clarify",
             "agent_events",
         ],
     )
@@ -391,6 +392,18 @@ def build_command(tool: str, args: dict) -> list[str]:
             command.extend(["--task-parameters-json", json.dumps(args["task_parameters"], ensure_ascii=False)])
         if args.get("conversation_state"):
             command.extend(["--conversation-state-json", json.dumps(args["conversation_state"], ensure_ascii=False)])
+        if args.get("wait"):
+            command.append("--wait")
+        if args.get("include_events"):
+            command.append("--include-events")
+        command.extend(optional("--timeout", args.get("timeout")))
+        return command
+    if tool == "agent_clarify":
+        command = base + ["agent", "clarify", args["run_id"]]
+        command.extend(optional("--clarification-id", args.get("clarification_id")))
+        command.extend(optional("--value", args.get("value")))
+        command.extend(optional("--answer", args.get("answer")))
+        command.extend(optional("--client-request-id", args.get("client_request_id")))
         if args.get("wait"):
             command.append("--wait")
         if args.get("include_events"):

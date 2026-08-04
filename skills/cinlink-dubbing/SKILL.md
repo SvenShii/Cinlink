@@ -22,18 +22,22 @@ cinlink --json translate /absolute/video.mp4 --to en --delivery voice --out /abs
 For "dub this video using this SRT":
 
 ```bash
-cinlink --json dub /absolute/video.mp4 --subtitle /absolute/translated.srt --lang en --out /absolute/out
+cinlink --json dub /absolute/video.mp4 --subtitle /absolute/translated.srt --reference-subtitle /absolute/source.reference.srt --lang en --out /absolute/out
 ```
 
-Optional: `--voice`, `--reference-subtitle`, repeated `--reference-audio speaker_id=/absolute/ref.wav`, `--timeout`.
+Optional: `--voice`, repeated `--reference-audio speaker_id=/absolute/ref.wav`, `--timeout`.
 
-Use `--reference-subtitle` when the source subtitle carries speaker/timing information. Use `--reference-audio speaker_0=/absolute/ref.wav` or additional speaker ids when the user provides speaker-specific voice references.
+For voice-cloned or speaker-aligned dubbing, pass the original-language timed subtitle with `--reference-subtitle`. It must contain usable cues and align cue-for-cue with the translated subtitle. Prefer the `source_reference_subtitle_path` or `source_subtitle_path` returned by transcribe/translate. If omitted, the CLI searches beside the translated subtitle for `source.reference.srt`, `subtitle.reference.srt`, then `source.srt`; if none is found, ask for/regenerate the source reference instead of pretending speaker alignment can continue.
+
+Use `--reference-audio speaker_0=/absolute/ref.wav` or additional speaker ids when the user provides speaker-specific voice references.
 
 For a complete dubbed MP4, generate dubbed audio first and then run `mix-dubbed-audio`, or route the broad request through `/cinlink-agent` so the hosted agent can plan `synthesize_dub_audio` followed by local `compose_dubbed_video` when that app-local capability is available.
 
 When selecting outputs for the next step, prefer `artifact_role=dubbed_audio` for local composition and `artifact_role=dubbed_video` for a completed video. Preserve `producer_step` when reporting local results.
 
 For a request that both shortens and dubs a video, preserve the original timeline through synthesis: extract/transcribe/translate/synthesize the full-length source, compose the full-length dubbed video, then render the selected highlight clips. Do not mix full-length dubbed audio into an already-shortened video.
+
+Keep the last spoken cue intact through the source timeline end. If the source is already at or below the requested short duration, do not shorten it merely to satisfy a nominal target.
 
 ## Mix Dubbed Audio
 

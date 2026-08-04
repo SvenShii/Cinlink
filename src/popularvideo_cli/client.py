@@ -3,6 +3,7 @@ from __future__ import annotations
 from contextlib import ExitStack
 import json
 from pathlib import Path
+import re
 import subprocess
 import tempfile
 import time
@@ -10,9 +11,23 @@ from typing import Any
 from uuid import uuid4
 
 from .config import Settings
-from .dependencies import resolve_ffmpeg
+from .dependencies import resolve_ffmpeg, resolve_ffprobe
 from .dependencies import default_client_capabilities_from_dependencies
 from .errors import CliError, normalize_remote_error
+
+
+_SAFE_JOB_ERROR_DETAIL_KEYS = (
+    "processing_stage",
+    "error_type",
+    "error_code",
+    "provider",
+    "http_status",
+    "request_id",
+    "retryable",
+)
+_SUBTITLE_TIMESTAMP_PATTERN = re.compile(
+    r"(\d+):(\d{2}):(\d{2})(?:[,.])(\d{1,3})"
+)
 
 
 class RuntimeClient:
@@ -91,7 +106,8 @@ class RuntimeClient:
         media = require_existing_file(video_path)
         media_is_video = _looks_like_video(media)
         subtitle = require_existing_file(subtitle_path)
-        reference_subtitle = require_existing_file(reference_subtitle_path) if reference_subtitle_path else None
+        reference_subtitle = require_existing_file(reference_subtitle_path) if reference_subtitle_path else _discover_reference_subtitle(subtitle)
+        reference_subtitle_auto_discovered = reference_subtitle is not None and reference_subtitle_path is None
         checked_reference_audio_paths = {
             str(speaker_id): require_existing_file(path)
             for speaker_id, path in (reference_audio_paths or {}).items()
@@ -122,10 +138,12 @@ class RuntimeClient:
                 reference_subtitle=reference_subtitle,
                 reference_audio_paths=checked_reference_audio_paths,
             )
-        payload = _annotate_dub_payload(payload, media, media_is_video=media_is_video)
         if isinstance(payload, dict) and "job_id" in payload and payload.get("status") not in {"done", "failed"}:
-            result = self.wait_for_job(payload["job_id"], timeout or self.settings.timeout_sec)
-            return _annotate_dub_payload(result, media, media_is_video=media_is_video)
+            payload = self.wait_for_job(payload["job_id"], timeout or self.settings.timeout_sec)
+        payload = _annotate_dub_payload(payload, media, media_is_video=media_is_video)
+        if reference_subtitle is not None:
+            payload.setdefault("source_reference_subtitle_path", str(reference_subtitle))
+            payload.setdefault("reference_subtitle_auto_discovered", reference_subtitle_auto_discovered)
         return payload
 
     def _submit_dub_audio(
@@ -364,6 +382,96 @@ class RuntimeClient:
         payload = self._request("GET", f"/v1/agent/runs/{run_id}")
         return _with_agent_privacy_receipt(_with_agent_delivery(payload))
 
+    def continue_agent_clarification(
+        self,
+        run_id: str,
+        *,
+        clarification_id: str | None = None,
+        value: str | None = None,
+        answer: str | None = None,
+        client_request_id: str | None = None,
+        wait: bool = False,
+        include_events: bool = False,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        previous = self.get_agent_run(run_id)
+        clarifications = [
+            item
+            for item in previous.get("clarifications") or []
+            if isinstance(item, dict)
+        ]
+        clarification = _select_agent_clarification(
+            clarifications,
+            clarification_id=clarification_id,
+        )
+        selected_value, prompt = _resolve_agent_clarification_answer(
+            clarification,
+            value=value,
+            answer=answer,
+        )
+        slot_key = str(clarification.get("slot_key") or "").strip()
+        if not slot_key:
+            raise CliError(
+                "invalid_agent_clarification",
+                "The selected CinLink clarification does not include a slot_key.",
+                {"run_id": run_id, "clarification_id": clarification.get("id")},
+            )
+
+        previous_conversation_state = previous.get("conversation_state")
+        previous_conversation_state = (
+            previous_conversation_state
+            if isinstance(previous_conversation_state, dict)
+            else {}
+        )
+        conversation_state = {
+            str(key): str(item)
+            for key, item in previous_conversation_state.items()
+            if item is not None
+        }
+        task_frame = previous.get("task_frame")
+        if not isinstance(task_frame, dict) or not task_frame:
+            raise CliError(
+                "invalid_agent_clarification",
+                "The previous CinLink Agent run does not include the task frame required to continue this clarification.",
+                {"run_id": run_id},
+            )
+        conversation_state["agent_task_frame_json"] = json.dumps(
+            task_frame,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        context_descriptors = _continuation_context_descriptors(
+            previous.get("context_files")
+        )
+        created = self.create_agent_run(
+            prompt,
+            conversation_id=str(previous.get("conversation_id") or "") or None,
+            context_descriptors=context_descriptors,
+            mode=str(previous.get("mode") or "execute"),
+            task_parameters={slot_key: selected_value},
+            conversation_state=conversation_state,
+            client_request_id=client_request_id,
+            app_language=str(previous.get("app_language") or "") or None,
+        )
+        if wait and created.get("run_id"):
+            result = self.wait_for_agent_run(
+                str(created["run_id"]),
+                timeout=timeout,
+                include_events=include_events,
+            )
+        else:
+            result = created
+        return {
+            **result,
+            "continued_from_run_id": run_id,
+            "answered_clarification": {
+                "id": clarification.get("id"),
+                "slot_key": slot_key,
+                "value": selected_value,
+                "label": prompt,
+            },
+        }
+
     def stream_agent_events(
         self,
         run_id: str,
@@ -478,7 +586,19 @@ class RuntimeClient:
             if payload.get("status") in {"done", "failed"}:
                 if payload.get("status") == "failed":
                     error = payload.get("error") if isinstance(payload.get("error"), dict) else {}
-                    raise CliError(str(error.get("code") or "processing_failed"), str(error.get("message") or "Remote job failed."), {"job_id": job_id})
+                    details = {"job_id": job_id}
+                    details.update(
+                        {
+                            key: error[key]
+                            for key in _SAFE_JOB_ERROR_DETAIL_KEYS
+                            if error.get(key) is not None
+                        }
+                    )
+                    raise CliError(
+                        str(error.get("code") or "processing_failed"),
+                        str(error.get("message") or "Remote job failed."),
+                        details,
+                    )
                 return payload
             if time.time() > deadline:
                 raise CliError("timeout", f"Job did not finish within {timeout} seconds.", {"job_id": job_id})
@@ -771,6 +891,122 @@ def _compact(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in payload.items() if value is not None}
 
 
+def _discover_reference_subtitle(translated_subtitle: Path) -> Path | None:
+    translated = translated_subtitle.expanduser().resolve()
+    for filename in ("source.reference.srt", "subtitle.reference.srt", "source.srt"):
+        candidate = translated.parent / filename
+        if candidate == translated or not candidate.is_file():
+            continue
+        if _subtitle_file_has_usable_cues(candidate):
+            return candidate.resolve()
+    return None
+
+
+def _select_agent_clarification(
+    clarifications: list[dict[str, Any]],
+    *,
+    clarification_id: str | None,
+) -> dict[str, Any]:
+    if clarification_id:
+        for item in clarifications:
+            if str(item.get("id") or "") == clarification_id:
+                return item
+        raise CliError(
+            "clarification_not_found",
+            "The requested CinLink Agent clarification was not found on this run.",
+            {
+                "clarification_id": clarification_id,
+                "available_clarification_ids": [
+                    str(item.get("id")) for item in clarifications if item.get("id")
+                ],
+            },
+        )
+    if len(clarifications) == 1:
+        return clarifications[0]
+    if not clarifications:
+        raise CliError(
+            "clarification_not_found",
+            "This CinLink Agent run does not expose a structured clarification. Poll the run and handle its requires_user_input message directly.",
+        )
+    raise CliError(
+        "clarification_id_required",
+        "This CinLink Agent run has multiple clarifications. Pass clarification_id for the one being answered.",
+        {
+            "available_clarifications": [
+                {
+                    "id": item.get("id"),
+                    "slot_key": item.get("slot_key"),
+                    "question": item.get("question"),
+                }
+                for item in clarifications
+            ]
+        },
+    )
+
+
+def _resolve_agent_clarification_answer(
+    clarification: dict[str, Any],
+    *,
+    value: str | None,
+    answer: str | None,
+) -> tuple[str, str]:
+    options = [
+        item for item in clarification.get("options") or [] if isinstance(item, dict)
+    ]
+    raw_answer = str(answer if answer is not None else value or "").strip()
+    input_kind = str(clarification.get("input_kind") or "text")
+    if input_kind == "single_select" or options:
+        if not raw_answer:
+            raise CliError(
+                "clarification_answer_required",
+                "Pass value with one of the clarification option values or labels.",
+                {"clarification_id": clarification.get("id")},
+            )
+        normalized = raw_answer.casefold()
+        for option in options:
+            option_value = str(option.get("value") or "").strip()
+            option_label = str(option.get("label") or option_value).strip()
+            if normalized in {option_value.casefold(), option_label.casefold()}:
+                return option_value, option_label
+        raise CliError(
+            "invalid_clarification_answer",
+            "The answer does not match a CinLink clarification option.",
+            {
+                "clarification_id": clarification.get("id"),
+                "options": [
+                    {
+                        "value": item.get("value"),
+                        "label": item.get("label"),
+                    }
+                    for item in options
+                ],
+            },
+        )
+    if not raw_answer:
+        raise CliError(
+            "clarification_answer_required",
+            "Pass answer for this text clarification.",
+            {"clarification_id": clarification.get("id")},
+        )
+    return raw_answer, raw_answer
+
+
+def _continuation_context_descriptors(value: Any) -> list[dict[str, Any]]:
+    if not isinstance(value, list):
+        return []
+    descriptors: list[dict[str, Any]] = []
+    for item in value:
+        if not isinstance(item, dict):
+            continue
+        descriptor = dict(item)
+        for key in ("path", "local_path", "local_hint"):
+            local_value = descriptor.get(key)
+            if local_value and not Path(str(local_value)).expanduser().is_file():
+                descriptor.pop(key, None)
+        descriptors.append(descriptor)
+    return descriptors
+
+
 def _context_file_payload(path: Path) -> dict[str, Any]:
     checked = require_existing_file(path)
     kind = "subtitle" if checked.suffix.lower() == ".txt" else infer_artifact_kind(checked)
@@ -804,14 +1040,31 @@ def _subtitle_file_has_usable_cues(path: Path) -> bool:
     except OSError:
         return False
     if suffix in {".ass", ".ssa"}:
-        return any(line.lstrip().startswith("Dialogue:") for line in content.splitlines())
-    return "-->" in content
+        for line in content.splitlines():
+            if not line.lstrip().startswith("Dialogue:"):
+                continue
+            fields = line.split(",", 9)
+            if len(fields) == 10 and fields[-1].replace(r"\N", " ").strip():
+                return True
+        return False
+    lines = content.splitlines()
+    for index, line in enumerate(lines):
+        if "-->" not in line:
+            continue
+        for cue_line in lines[index + 1 :]:
+            stripped = cue_line.strip()
+            if "-->" in cue_line or not stripped:
+                break
+            if stripped and not stripped.isdigit():
+                return True
+    return False
 
 
 def _annotate_context_relationships(
     context_files: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
     videos = [item for item in context_files if item.get("kind") == "video"]
+    duration_cache: dict[str, float | None] = {}
     annotated: list[dict[str, Any]] = []
     for item in context_files:
         if item.get("kind") != "subtitle":
@@ -837,8 +1090,143 @@ def _annotate_context_relationships(
                     )
                 else:
                     metadata["subtitle_source_video_name"] = str(source.get("name") or "")
+        else:
+            source = _linked_context_video_for_subtitle(metadata, videos)
+        if source is not None:
+            _annotate_subtitle_timeline_fit(
+                item,
+                source,
+                metadata,
+                duration_cache=duration_cache,
+            )
         annotated.append({**item, "metadata": metadata})
     return annotated
+
+
+def _linked_context_video_for_subtitle(
+    metadata: dict[str, Any],
+    videos: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    references = (
+        ("subtitle_source_video_id", "id"),
+        ("subtitle_source_video_entity_id", "entity_id"),
+        ("subtitle_source_video_name", "name"),
+    )
+    for metadata_key, video_key in references:
+        expected = str(metadata.get(metadata_key) or "").strip()
+        if not expected:
+            continue
+        matches = [
+            video
+            for video in videos
+            if str(video.get(video_key) or "").strip() == expected
+        ]
+        if len(matches) == 1:
+            return matches[0]
+    return None
+
+
+def _annotate_subtitle_timeline_fit(
+    subtitle: dict[str, Any],
+    video: dict[str, Any],
+    metadata: dict[str, Any],
+    *,
+    duration_cache: dict[str, float | None],
+) -> None:
+    subtitle_path = _existing_context_local_path(subtitle)
+    video_path = _existing_context_local_path(video)
+    if subtitle_path is None or video_path is None:
+        return
+    bounds = _subtitle_timeline_bounds(subtitle_path)
+    if bounds is None:
+        return
+    cache_key = str(video_path)
+    if cache_key not in duration_cache:
+        duration_cache[cache_key] = _probe_media_duration(video_path)
+    duration = duration_cache[cache_key]
+    if duration is None:
+        return
+    max_start, max_end = bounds
+    start_grace = 1.5
+    end_grace = max(3.0, min(10.0, duration * 0.05))
+    if max_start <= duration + start_grace and max_end <= duration + end_grace:
+        return
+    metadata.update(
+        {
+            "subtitle_reuse_eligible": "false",
+            "subtitle_timeline_mismatch": "true",
+            "subtitle_max_start_sec": f"{max_start:.3f}",
+            "subtitle_end_sec": f"{max_end:.3f}",
+            "source_video_duration_sec": f"{duration:.3f}",
+        }
+    )
+
+
+def _existing_context_local_path(item: dict[str, Any]) -> Path | None:
+    for key in ("local_path", "local_hint", "path"):
+        raw = item.get(key)
+        if not raw:
+            continue
+        candidate = Path(str(raw)).expanduser()
+        if candidate.is_file():
+            return candidate.resolve()
+    return None
+
+
+def _subtitle_timeline_bounds(path: Path) -> tuple[float, float] | None:
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")[:1_000_000]
+    except OSError:
+        return None
+    timestamps: list[float] = []
+    for match in _SUBTITLE_TIMESTAMP_PATTERN.finditer(content):
+        fraction = match.group(4)
+        timestamps.append(
+            int(match.group(1)) * 3600
+            + int(match.group(2)) * 60
+            + int(match.group(3))
+            + int(fraction) / (10 ** len(fraction))
+        )
+    if not timestamps:
+        return None
+    max_start = 0.0
+    max_end = 0.0
+    for index in range(0, len(timestamps), 2):
+        start = timestamps[index]
+        end = timestamps[index + 1] if index + 1 < len(timestamps) else start
+        max_start = max(max_start, start)
+        max_end = max(max_end, end)
+    return max_start, max_end
+
+
+def _probe_media_duration(path: Path) -> float | None:
+    ffmpeg = resolve_ffmpeg(require_subtitles=False)
+    ffprobe = resolve_ffprobe(ffmpeg)
+    if not ffprobe:
+        return None
+    try:
+        completed = subprocess.run(
+            [
+                str(ffprobe),
+                "-v",
+                "error",
+                "-show_entries",
+                "format=duration",
+                "-of",
+                "default=noprint_wrappers=1:nokey=1",
+                str(path),
+            ],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=15,
+        )
+        duration = float(completed.stdout.strip()) if completed.returncode == 0 else 0.0
+    except (OSError, subprocess.TimeoutExpired, ValueError):
+        return None
+    return duration if duration > 0 else None
 
 
 def _unique_context_video_for_subtitle(

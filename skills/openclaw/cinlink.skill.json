@@ -27,6 +27,11 @@
       "tool_arg": "agent_run"
     },
     {
+      "name": "cinlink_agent_clarify",
+      "description": "Answer a structured clarification and continue the same CinLink agent task.",
+      "tool_arg": "agent_clarify"
+    },
+    {
       "name": "cinlink_agent_events",
       "description": "Read public planning and reasoning events for a hosted CinLink agent run.",
       "tool_arg": "agent_events"

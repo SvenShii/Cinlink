@@ -66,6 +66,8 @@ cinlink --json doctor
 
 `doctor` reports API key presence, runtime health, local `ffmpeg`, Demucs, and `soundfile` status. If voice separation or background preservation is requested and dependencies are missing, ask before installing anything.
 
+Hosted job failures may include safe `error.details` such as `processing_stage`, `provider`, `request_id`, and `retryable`. Keep those fields for diagnostics and retry only when `retryable=true`.
+
 Brand Kit settings are stored in the same user-level JSON config as the API setup, not in `.env` or the installed skill directory. API-key onboarding preserves existing Brand Kit settings.
 
 ## JSON Tool Bridge
@@ -99,6 +101,7 @@ cinlink --json tools schema clean_cut
 cinlink --json tools schema brand_kit
 cinlink --json tools schema deconstruct_video
 cinlink --json tools schema export_editor_project
+cinlink --json tools schema agent_clarify
 cinlink --json tools schema agent_events
 ```
 

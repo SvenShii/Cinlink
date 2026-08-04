@@ -34,6 +34,17 @@ tools:
       wait: boolean
       include_events: boolean
       timeout: number
+  - name: cinlink_agent_clarify
+    command: cinlink --json agent clarify "{run_id}"
+    args_schema:
+      run_id: string
+      clarification_id: string
+      value: string
+      answer: string
+      client_request_id: string
+      wait: boolean
+      include_events: boolean
+      timeout: number
   - name: cinlink_agent_events
     command: cinlink --json agent events "{run_id}"
     args_schema:

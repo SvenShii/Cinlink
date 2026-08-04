@@ -411,6 +411,17 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
                 include_events=bool(args.get("include_events", False)),
             )
         return created
+    if name == "agent_clarify":
+        return client.continue_agent_clarification(
+            str(args["run_id"]),
+            clarification_id=args.get("clarification_id"),
+            value=args.get("value"),
+            answer=args.get("answer"),
+            client_request_id=args.get("client_request_id"),
+            wait=bool(args.get("wait", False)),
+            include_events=bool(args.get("include_events", False)),
+            timeout=_float_or_none(args.get("timeout")),
+        )
     if name == "agent_events":
         return client.stream_agent_events(
             str(args["run_id"]),

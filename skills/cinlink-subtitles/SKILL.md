@@ -71,4 +71,5 @@ cinlink --json burn /absolute/video.mp4 --subtitle /absolute/subtitles.srt --no-
 - Expect local `ffmpeg` for every hosted workflow that starts from a video, because the current runtime accepts extracted audio rather than a full video upload.
 - For translated voice output, switch to `/cinlink-dubbing`.
 - When a response contains multiple subtitle artifacts, choose `artifact_role=translated_subtitle` for translated output, `edited_subtitle` for shortened/edited output, and `source_subtitle` only when the original-language subtitle is requested. Do not select the first `.srt` blindly.
+- Before reusing a subtitle with an Agent video context, honor `subtitle_reuse_eligible=false` and `subtitle_timeline_mismatch=true`. The CLI rejects cues whose starts exceed video duration by more than 1.5 seconds or whose ends exceed the dynamic 3-10 second grace window.
 - Return the `privacy_receipt`: for video input, the source video stays local while extracted audio may be processed by CinLink Cloud; final subtitle burn remains local.

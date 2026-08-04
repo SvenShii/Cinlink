@@ -57,10 +57,10 @@ App-parity composite workflow. If `--subtitle <path>` is provided, it burns that
 ### dub
 
 ```bash
-cinlink --json dub <video_or_audio_path> --subtitle <subtitle_path> --lang en --voice <voice> --reference-audio speaker_0=<ref_audio_path> --out <dir>
+cinlink --json dub <video_or_audio_path> --subtitle <subtitle_path> --reference-subtitle <source_subtitle_path> --lang en --voice <voice> --reference-audio speaker_0=<ref_audio_path> --out <dir>
 ```
 
-Generates dubbed speech/audio using an existing subtitle file. The hosted runtime accepts audio, not video uploads; when the first argument is a video, the CLI extracts audio locally with `ffmpeg` before calling `/v1/dub`. Optional: `--reference-subtitle`, repeated `--reference-audio SPEAKER_ID=PATH`, `--timeout`.
+Generates dubbed speech/audio using an existing subtitle file. The hosted runtime accepts audio, not video uploads; when the first argument is a video, the CLI extracts audio locally with `ffmpeg` before calling `/v1/dub`. For speaker-aligned/voice-cloned output, pass an original-language timed `--reference-subtitle` whose usable cue count matches the translated subtitle. If omitted, the CLI checks sibling `source.reference.srt`, `subtitle.reference.srt`, then `source.srt`. Also optional: repeated `--reference-audio SPEAKER_ID=PATH`, `--timeout`.
 
 ### burn
 
@@ -224,7 +224,17 @@ The Hermes-first agent may return `execute_plan`, `research_capability`, or `pro
 
 Agent tool arguments are string-only on the wire. Booleans use `true`/`false`; list-like values may use newline-delimited, comma-delimited, or JSON-array strings.
 
-A valid local SRT/VTT/ASS passed with one video is marked reusable and linked to that video. With multiple subtitles or images, preserve exact ids, language, artifact role, source lineage, `cloud_file_id`, and `public_url` through `--context-json` so the execution DAG binds the intended artifact.
+A valid local SRT/VTT/ASS passed with one video is marked reusable and linked to that video. When `ffprobe` is available, the CLI rejects reuse if cue starts exceed video duration plus 1.5 seconds or cue ends exceed the dynamic 3-10 second grace window. With multiple subtitles or images, preserve exact ids, language, artifact role, source lineage, `cloud_file_id`, and `public_url` through `--context-json` so the execution DAG binds the intended artifact.
+
+### agent clarify
+
+When `agent run`, `agent poll`, or a waited result returns `status=requires_user_input` with structured `clarifications`, show the question and option labels to the user, then continue the original task:
+
+```bash
+cinlink --json agent clarify <run_id> --clarification-id <id> --value <option_value_or_label> --wait --include-events
+```
+
+Use `--answer` for `input_kind=text`. `--clarification-id` is optional only when exactly one clarification exists. The command carries forward the prior conversation, task frame, context artifacts, app language, and compound execution plan. A `requires_user_input` result without `clarifications` is usually an install/authorization request and must not be sent to this command.
 
 Also available: `agent poll`, `agent events`, `agent local-tools`, `agent report-tool-result`. `agent events` reads public planning/reasoning progress over SSE; it never exposes hidden model scratch work. The report command infers artifact kind for `--artifact-path`. Use repeated `--artifact-json` and `--artifact-metadata-json` to preserve per-artifact roles and lineage.
 
@@ -240,3 +250,5 @@ Agent and direct media results may include `privacy_receipt`, which records whet
 - `quota_exceeded`: tell the user to check billing/top up.
 - `timeout`: report the job/run id if present and suggest polling again.
 - `network_error` / `remote_error`: retry or inspect the runtime base.
+
+Failed jobs may include safe `details`: `processing_stage`, `error_type`, `error_code`, `provider`, `http_status`, `request_id`, and `retryable`. Show the public `code`/`message`, retain those details for diagnostics, and automatically retry only when `retryable` is `true`.

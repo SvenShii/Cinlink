@@ -135,14 +135,17 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         },
     },
     "dub": {
-        "description": "Generate dubbed speech/audio using an existing subtitle file. When video_path is a video, the CLI extracts audio locally before calling the hosted /v1/dub runtime because the server no longer accepts video uploads for dubbing.",
+        "description": "Generate dubbed speech/audio using an existing translated subtitle. When video_path is a video, the CLI extracts audio locally before calling the hosted /v1/dub runtime. Speaker-aligned or voice-cloned output also needs an original-language reference subtitle with matching cues.",
         "input_schema": {
             "type": "object",
             "required": ["video_path", "subtitle_path"],
             "properties": {
                 "video_path": {"type": "string", "description": "Absolute path to a local video or already-extracted reference audio file."},
                 "subtitle_path": {"type": "string"},
-                "reference_subtitle_path": {"type": "string"},
+                "reference_subtitle_path": {
+                    "type": "string",
+                    "description": "Original-language timed subtitle for speaker alignment. If omitted, the CLI searches sibling source.reference.srt, subtitle.reference.srt, then source.srt.",
+                },
                 "reference_audio_paths": {
                     "type": "object",
                     "additionalProperties": {"type": "string"},
@@ -660,6 +663,59 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "primary_artifacts": {"type": "array"},
                 "supporting_artifacts": {"type": "array"},
                 "intermediate_artifacts": {"type": "array"},
+                "clarifications": {
+                    "type": "array",
+                    "description": "Structured questions returned when status is requires_user_input. Present these to the user and continue with agent_clarify.",
+                },
+                "agent_events": {"type": "array"},
+            },
+        },
+    },
+    "agent_clarify": {
+        "description": "Answer one structured clarification from a CinLink Agent run and continue the same task. The tool preserves the prior task frame, conversation, context artifacts, language, and selected slot value.",
+        "input_schema": {
+            "type": "object",
+            "required": ["run_id"],
+            "properties": {
+                "run_id": {
+                    "type": "string",
+                    "description": "Run whose status is requires_user_input and whose clarifications array contains the question being answered.",
+                },
+                "clarification_id": {
+                    "type": "string",
+                    "description": "Required when the run exposes multiple clarifications; optional when exactly one is present.",
+                },
+                "value": {
+                    "type": "string",
+                    "description": "Option value or label for a single_select clarification.",
+                },
+                "answer": {
+                    "type": "string",
+                    "description": "Free-form answer for a text clarification. It may also contain an option value or label.",
+                },
+                "client_request_id": {
+                    "type": "string",
+                    "description": "Optional idempotency/correlation id for the continuation run.",
+                },
+                "wait": {"type": "boolean", "default": False},
+                "include_events": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When waiting, include public planning/reasoning events.",
+                },
+                "timeout": {"type": "number", "default": 1800},
+            },
+        },
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "run_id": {"type": "string"},
+                "continued_from_run_id": {"type": "string"},
+                "answered_clarification": {"type": "object"},
+                "status": {"type": "string"},
+                "clarifications": {"type": "array"},
+                "primary_artifacts": {"type": "array"},
+                "supporting_artifacts": {"type": "array"},
                 "agent_events": {"type": "array"},
             },
         },

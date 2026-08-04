@@ -41,11 +41,27 @@ Use `--context-file` for a plain local path. Use repeated `--context-json` when 
 
 When one video and a valid timed SRT/VTT/ASS are passed as local context files, the CLI marks the subtitle reusable and binds it to that video. For multiple subtitles or generated artifacts, use `--context-json` with explicit source lineage and language metadata so the runtime can select the exact target-language subtitle rather than retranscribing or translating it again.
 
+The CLI checks a bound local subtitle timeline against the local video's duration when `ffprobe` is available. If cue starts or ends exceed the app's grace window, it marks `subtitle_reuse_eligible=false`; do not force reuse or bypass that mismatch.
+
 ## Poll
 
 ```bash
 cinlink --json agent poll <run_id>
 ```
+
+## Structured Clarifications
+
+When a run returns `status=requires_user_input`, inspect `clarifications`. Present each `question` and its option labels to the user; never silently choose `is_default`.
+
+After the user chooses an option, continue the same task with its value or label:
+
+```bash
+cinlink --json agent clarify <run_id> --clarification-id <id> --value voice --wait --include-events
+```
+
+For `input_kind=text`, pass `--answer "<user answer>"`. When exactly one clarification exists, `--clarification-id` may be omitted. Answer multiple clarifications one at a time. `agent clarify` preserves the prior task frame, conversation, context files, language, and compound execution plan; do not rebuild these fields manually.
+
+Some install or capability approvals use `requires_user_input` without a structured `clarifications` array. Ask for the requested authorization and follow the local install/tool flow instead of calling `agent clarify`.
 
 ## Public Event Stream
 
@@ -93,6 +109,8 @@ For a shortened voice-dub video, synthesize against the original full-length aud
 Return the run's `privacy_receipt` in user-facing terms: what stayed local, which derived inputs went to CinLink Cloud, and whether final video rendering happened locally.
 
 When a run finishes, use `completion_message` as the user-facing completion text. Deliver `primary_artifacts` as the actual result, mention `supporting_artifacts` only when useful, and do not present `intermediate_artifacts` as final output. The raw `artifacts` list remains available for compatibility but should not drive final delivery.
+
+On failure, show only the returned public `code` and `message`. Preserve safe `details` fields such as `processing_stage`, `provider`, `request_id`, and `retryable` for troubleshooting. Retry only when `retryable=true`; never expose or invent provider internals.
 
 ## Routing Guidance
 
