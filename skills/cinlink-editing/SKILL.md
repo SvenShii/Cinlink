@@ -1,6 +1,6 @@
 ---
 name: cinlink-editing
-description: CinLink local video editing workflows for agents. Use to remove long pauses with Clean Cut, trim exact timestamp ranges, turn selected material ranges into an ordered montage, apply text/image watermarks, or configure and automatically apply a persistent Brand Kit to caption and watermark exports. These workflows are local-only and require ffmpeg, but do not require a CinLink API key.
+description: CinLink local video editing and export workflows for agents. Use to remove long pauses, trim or montage clips, apply watermarks/Brand Kits, export video or audio formats, and create CapCut, Premiere Pro, Final Cut Pro, or DaVinci Resolve handoff projects. These workflows are local-only and require ffmpeg/ffprobe, but do not require a CinLink API key.
 ---
 
 # CinLink Editing
@@ -89,10 +89,53 @@ cinlink --json apply-watermark /absolute/video.mp4 --watermark-text "Example" --
 
 Image and text watermarks can be combined. Use absolute paths for local logo files.
 
+## Video And Audio Export
+
+Export a local video as MP4, MOV, AVI, or MKV:
+
+```bash
+cinlink --json export-video /absolute/video.mp4 --format mov --out /absolute/export
+```
+
+Export the video's audio as WAV or MP3:
+
+```bash
+cinlink --json export-audio /absolute/video.mp4 --format mp3 --out /absolute/export
+```
+
+When the workflow already produced a replacement/mixed audio track, pass it explicitly:
+
+```bash
+cinlink --json export-audio /absolute/video.mp4 --audio-source /absolute/mixed.wav --format wav --out /absolute/export
+```
+
+## Editor Project Handoff
+
+Create local import assets for an editor:
+
+```bash
+cinlink --json export-editor-project /absolute/video.mp4 \
+  --target final-cut \
+  --subtitle /absolute/subtitles.srt \
+  --audio-source /absolute/mixed.wav \
+  --out /absolute/editor-handoff
+```
+
+Targets:
+
+- `final-cut`: Final Cut Pro FCPXML
+- `premiere`: Adobe Premiere Pro-compatible XML
+- `resolve`: DaVinci Resolve-compatible XML
+- `capcut`: portable folder with media, optional audio/SRT, and `timeline.json`
+
+CinLink creates handoff assets but does not launch or control desktop editor applications. CapCut does not accept third-party project files, so import the media and optional SRT/audio from the returned package.
+
 ## Rules
 
 - These tools are local-only: no CinLink API key or hosted upload is required.
 - Local `ffmpeg` and `ffprobe` are required. Run `cinlink --json doctor` and ask before installing missing dependencies.
 - Return the typed artifact metadata and privacy receipt. The source video should report `stayed_local` and hosted inputs should be empty.
+- For editor handoff, present `primary_artifacts` as the project file/package manifest and `supporting_artifacts` as optional media, audio, or subtitle companions.
 - Use `/cinlink-subtitles` when the task also needs transcription or translation.
 - Use `/cinlink-understanding` first when clip timestamps must be discovered from media content.
+- Use `/cinlink-deconstruction` when the user wants visual shot analysis or hosted shot regeneration rather than a local edit/export.

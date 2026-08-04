@@ -23,6 +23,10 @@ cinlink --json shorten /absolute/video.mp4 --target-duration 45 --max-clips 5 --
 
 The CLI keeps the full video local, uploads extracted audio for hosted analysis, and returns `source_video_path` with the highlight plan and artifact paths when available. Use `/cinlink-editing` to render known timestamp ranges with `trim-video` or combine selected ranges with `montage`; use `/cinlink-agent` when the plan requires broader orchestration.
 
+When the user already has a valid timed subtitle, pass both video and subtitle through `/cinlink-agent`; the CLI marks a single SRT/VTT/ASS reusable and binds it to the source video, avoiding unnecessary transcription. With several subtitles, preserve `artifact_role`, `target_language`, and source-video lineage in `--context-json` so the runtime can select the intended language.
+
+For a short video that also needs translated voice, complete the full-length dubbing timeline first and shorten the composed dubbed video afterward.
+
 Optional arguments:
 
 - `--style-preset`

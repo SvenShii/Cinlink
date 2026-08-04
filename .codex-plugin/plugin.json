@@ -1,7 +1,7 @@
 {
   "name": "cinlink",
   "version": "0.1.0",
-  "description": "CinLink media tools for agents: subtitles, translation, dubbing, video understanding, AI image/video generation, and hosted media workflows.",
+  "description": "CinLink media tools for agents: subtitles, dubbing, video understanding/deconstruction, local media/editor export, AI generation, and hosted workflows.",
   "author": {
     "name": "CinLink",
     "url": "https://cinlink.ai"
@@ -16,6 +16,9 @@
     "captions",
     "translation",
     "dubbing",
+    "deconstruction",
+    "video-editing",
+    "media-export",
     "summarization",
     "ai-video",
     "ai-image",
@@ -24,8 +27,8 @@
   "skills": "./skills/",
   "interface": {
     "displayName": "CinLink",
-    "shortDescription": "Video, subtitles, dubbing, and AI media",
-    "longDescription": "Use CinLink from agents through focused skills and a hosted-first CLI. Configure a CinLink API key, transcribe and translate media, burn styled subtitles locally, create dubbing and voice translation, summarize and shorten videos, generate AI images and videos, and run hosted multi-step media workflows.",
+    "shortDescription": "Create, understand, edit, and export video",
+    "longDescription": "Use CinLink from agents through focused skills and a hosted-first CLI. Configure a CinLink API key, transcribe and translate media, create dubbing, understand or deconstruct videos, replace visual references, export local media and editor handoffs, generate AI images/videos, and run hosted multi-step media workflows.",
     "developerName": "CinLink",
     "category": "Creativity",
     "capabilities": ["Read", "Write"],
@@ -33,7 +36,8 @@
     "defaultPrompt": [
       "Transcribe this video and create subtitles",
       "Dub this video into English",
-      "Summarize this long video and make a highlight plan"
+      "Deconstruct this video and replace its product",
+      "Export this video as a Final Cut project"
     ],
     "brandColor": "#111827",
     "composerIcon": "./assets/icon.svg",

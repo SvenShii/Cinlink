@@ -28,7 +28,7 @@ cinlink --json setup-local-deps --dry-run --with-voice-separation
 cinlink setup-local-deps --yes
 ```
 
-Prompts the user to install local dependencies. `ffmpeg`/`ffprobe` are recommended for subtitle burn-in, local audio extraction/mixing, Clean Cut, trim/montage, watermark export, and local media inspection. `demucs` plus `soundfile` are optional and are only needed for local voice separation/background preservation. Do not run with `--yes` until the user has confirmed.
+Prompts the user to install local dependencies. `ffmpeg`/`ffprobe` are recommended for subtitle burn-in, local audio extraction/mixing, Clean Cut, trim/montage, watermark export, video deconstruction/assembly, media export, editor project handoff, and local media inspection. `demucs` plus `soundfile` are optional and are only needed for local voice separation/background preservation. Do not run with `--yes` until the user has confirmed.
 
 ### transcribe
 
@@ -139,8 +139,10 @@ Optional: `--style-preset`, `--music-mode`, `--music-prompt`. The CLI keeps the 
 ### image
 
 ```bash
-cinlink --json image "<prompt>" --aspect-ratio 1:1 --image-size 1K --out <dir>
+cinlink --json image "<prompt>" --aspect-ratio 1:1 --image-size 1K --reference-image-url <url_or_local_path> --out <dir>
 ```
+
+Optional: up to three repeated `--reference-image-url` values, `--model`, and `--timeout`. Local reference images are uploaded through the authenticated reference-image endpoint. The command waits for the hosted job and downloads the final image.
 
 Optional: `--model`.
 
@@ -150,7 +152,47 @@ Optional: `--model`.
 cinlink --json video "<prompt>" --aspect-ratio 16:9 --duration 5 --out <dir>
 ```
 
-Optional: `--resolution`, `--no-audio`, `--watermark`, `--generation-mode`, `--first-frame-image-url`, repeated `--reference-image-url`, repeated `--reference-video-url`, repeated `--reference-audio-url`, `--model`, `--model-name`, `--model-version`, `--timeout`. When references are supplied and generation mode is omitted, the CLI selects `reference`.
+Optional: `--resolution`, `--no-audio`, `--watermark`, `--generation-mode`, `--first-frame-image-url`, repeated `--reference-image-url`, repeated `--reference-video-url`, repeated `--reference-audio-url`, `--model`, `--model-name`, `--model-version`, `--timeout`. First-frame and reference-image values may be remote URLs or local image paths; local paths are uploaded through the authenticated reference-image endpoint. Reference video/audio values remain remote URLs.
+
+### deconstruct-video
+
+```bash
+cinlink --json deconstruct-video <video_path> --language zh-Hans --analysis-scope "camera and lighting" --scene-threshold 0.28 --max-shots 120 --out <dir_or_json>
+```
+
+Detects cuts and samples first/middle/last shot frames locally, then sends only those frames to hosted deconstruction. `--language` controls human-readable titles/summaries/style/audio analysis; `--analysis-scope` focuses the visual analysis. Optional repeated `--replacement-reference person|product|scene=<image_path>` values are stored in the editable plan.
+
+### regenerate-deconstruction
+
+```bash
+cinlink --json regenerate-deconstruction <plan_path> --resolution 720P --out <dir_or_video>
+```
+
+Generates the plan sequentially with cross-shot tail-frame continuity and assembles the result locally. Optional repeated `--replacement-reference`, model selectors, `--timeout`, and `--no-original-audio`.
+
+### export-video
+
+```bash
+cinlink --json export-video <video_path> --format mp4|mov|avi|mkv --out <dir_or_file>
+```
+
+Local-only ffmpeg export.
+
+### export-audio
+
+```bash
+cinlink --json export-audio <video_path> --format wav|mp3 --audio-source <optional_audio_path> --out <dir_or_file>
+```
+
+Local-only audio export. `--audio-source` selects a replacement/mixed track instead of the video's embedded audio.
+
+### export-editor-project
+
+```bash
+cinlink --json export-editor-project <video_path> --target capcut|premiere|final-cut|resolve --subtitle <srt> --audio-source <audio> --out <dir>
+```
+
+Creates local XML/FCPXML or a portable CapCut media package. It does not launch a desktop editor.
 
 ### nlu
 
@@ -163,7 +205,7 @@ Routes a natural-language media task into an action and slots.
 ### agent run
 
 ```bash
-cinlink --json agent run "<prompt>" --context-file <path> --app-language zh --mode execute --wait
+cinlink --json agent run "<prompt>" --context-file <path> --app-language zh --mode execute --wait --include-events
 ```
 
 Use for broad, multi-step media workflows. When the app surface action is known, pass it explicitly:
@@ -178,9 +220,15 @@ Pass `--app-language zh|en|ja` whenever the caller knows the user's language. Us
 
 Use `--hidden-context` or `--hidden-context-file` for invisible client UI context such as selected settings. Do not put secrets there, and do not copy hidden context into assistant-visible output or provider prompts.
 
-The Hermes-first agent may return `execute_plan`, `research_capability`, or `propose_workaround`. Its local media tool set includes subtitle staging, analyzed-video search, audio/frame extraction, probing, trim/crop/transcode, watermark/subtitle burn, highlight/visual/styled rendering, music mixing, clip merging, enhancement, and dubbed-video composition. It can also request authorized local file search/read, clipboard, screenshot, or app context. Only execute a local tool if the corresponding client capability and user authorization are present. Typed dubbing plans use local `extract_audio`, server `transcribe_audio`/`translate_subtitle`/`synthesize_dub_audio`, then local `compose_dubbed_video` when available.
+The Hermes-first agent may return `execute_plan`, `research_capability`, or `propose_workaround`. Its local media tool set includes subtitle staging, analyzed-video search, audio/frame extraction, probing, trim/crop/transcode, watermark/subtitle burn, highlight/visual/styled rendering, music mixing, clip merging, enhancement, and dubbed-video composition. It can also request authorized local file search/read, clipboard, screenshot, or app context. Hosted nodes include transcription, translation, speech synthesis, summary, shortening, frame deconstruction, image/video generation, and public web query. Only execute a local tool if the corresponding client capability and user authorization are present. Typed dubbing plans use local `extract_audio`, server `transcribe_audio`/`translate_subtitle`/`synthesize_dub_audio`, then local `compose_dubbed_video` when available. For shortened dubbed video, compose the full-length dubbed timeline before highlight rendering.
 
-Also available: `agent poll`, `agent local-tools`, `agent report-tool-result`. The report command infers artifact kind for `--artifact-path`. Use repeated `--artifact-json` and `--artifact-metadata-json` to preserve per-artifact roles and lineage.
+Agent tool arguments are string-only on the wire. Booleans use `true`/`false`; list-like values may use newline-delimited, comma-delimited, or JSON-array strings.
+
+A valid local SRT/VTT/ASS passed with one video is marked reusable and linked to that video. With multiple subtitles or images, preserve exact ids, language, artifact role, source lineage, `cloud_file_id`, and `public_url` through `--context-json` so the execution DAG binds the intended artifact.
+
+Also available: `agent poll`, `agent events`, `agent local-tools`, `agent report-tool-result`. `agent events` reads public planning/reasoning progress over SSE; it never exposes hidden model scratch work. The report command infers artifact kind for `--artifact-path`. Use repeated `--artifact-json` and `--artifact-metadata-json` to preserve per-artifact roles and lineage.
+
+Completed agent results include `completion_message`, `primary_artifacts`, `supporting_artifacts`, and `intermediate_artifacts`. Deliver primary artifacts as the result, mention supporting artifacts when useful, and do not present intermediate artifacts as final output.
 
 Agent and direct media results may include `privacy_receipt`, which records whether the source video stayed local, which derived inputs were processed by CinLink Cloud, and whether final rendering happened locally.
 

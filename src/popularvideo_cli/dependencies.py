@@ -31,6 +31,7 @@ def local_dependency_report() -> dict[str, Any]:
     ffmpeg_path = resolve_ffmpeg(require_subtitles=False)
     ffprobe_path = resolve_ffprobe(ffmpeg_path)
     subtitle_ffmpeg_path = resolve_ffmpeg(require_subtitles=True)
+    mp3_ffmpeg_path = resolve_ffmpeg_with_encoder("libmp3lame")
     demucs_available = importlib.util.find_spec("demucs") is not None
     soundfile_available = importlib.util.find_spec("soundfile") is not None
     voice_ready = bool(ffmpeg_path and demucs_available and soundfile_available)
@@ -47,6 +48,8 @@ def local_dependency_report() -> dict[str, Any]:
             "subtitles_filter": bool(subtitle_ffmpeg_path),
             "subtitle_burn_available": bool(subtitle_ffmpeg_path),
             "subtitle_burn_path": str(subtitle_ffmpeg_path) if subtitle_ffmpeg_path else None,
+            "mp3_encoder_available": bool(mp3_ffmpeg_path),
+            "mp3_encoder_path": str(mp3_ffmpeg_path) if mp3_ffmpeg_path else None,
             "used_for": [
                 "subtitle_burn",
                 "local_audio_extract",
@@ -55,6 +58,10 @@ def local_dependency_report() -> dict[str, Any]:
                 "local_montage",
                 "clean_cut",
                 "watermark",
+                "video_deconstruction",
+                "regeneration_assembly",
+                "video_audio_export",
+                "editor_project_export",
                 "local_voice_separation",
             ],
             "install_hint": {
@@ -67,7 +74,14 @@ def local_dependency_report() -> dict[str, Any]:
         "ffprobe": {
             "available": bool(ffprobe_path),
             "path": str(ffprobe_path) if ffprobe_path else None,
-            "used_for": ["local_media_probe", "local_video_trim", "local_montage", "clean_cut"],
+            "used_for": [
+                "local_media_probe",
+                "local_video_trim",
+                "local_montage",
+                "clean_cut",
+                "video_deconstruction",
+                "editor_project_export",
+            ],
             "install_hint": "ffprobe is normally installed with ffmpeg.",
         },
         "demucs": {
@@ -122,6 +136,8 @@ def default_client_capabilities_from_dependencies() -> dict[str, bool]:
         "can_clean_cut_locally": editing_available,
         "can_manage_brand_kit_locally": True,
         "can_download_artifacts": True,
+        "supports_agent_event_stream": True,
+        "supports_agent_reasoning_stream": True,
     }
 
 
@@ -168,6 +184,17 @@ def resolve_ffmpeg(require_subtitles: bool = False) -> Path | None:
         if require_subtitles and not ffmpeg_supports_filter(candidate, "subtitles"):
             continue
         return candidate
+    return None
+
+
+def resolve_ffmpeg_with_encoder(encoder_name: str) -> Path | None:
+    for candidate in ffmpeg_candidates():
+        if not _is_executable(candidate):
+            continue
+        if not _binary_works(candidate, ["-nostdin", "-version"]):
+            continue
+        if ffmpeg_supports_encoder(candidate, encoder_name):
+            return candidate
     return None
 
 
@@ -240,6 +267,17 @@ def ffmpeg_supports_filter(ffmpeg_path: Path, filter_name: str) -> bool:
     for line in output.splitlines():
         columns = line.split()
         if len(columns) >= 2 and columns[1] == filter_name:
+            return True
+    return False
+
+
+def ffmpeg_supports_encoder(ffmpeg_path: Path, encoder_name: str) -> bool:
+    output = _run_and_capture(ffmpeg_path, ["-nostdin", "-hide_banner", "-encoders"])
+    if output is None:
+        return False
+    for line in output.splitlines():
+        columns = line.split()
+        if len(columns) >= 2 and columns[1] == encoder_name:
             return True
     return False
 

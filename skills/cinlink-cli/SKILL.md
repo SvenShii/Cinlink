@@ -22,7 +22,7 @@ After the CLI is installed, run the local dependency setup:
 cinlink setup-local-deps
 ```
 
-This checks local `ffmpeg`/`ffprobe` for subtitle burn-in, audio work, Clean Cut, trimming, montage, and watermark export, then prompts before using a platform package manager to install it. It also offers optional `demucs` and `soundfile` for local voice separation/background preservation. For non-interactive agents, first show a dry run:
+This checks local `ffmpeg`/`ffprobe` for subtitle burn-in, audio work, Clean Cut, trimming, montage, watermark export, video deconstruction/assembly, media export, and editor project handoff, then prompts before using a platform package manager to install it. It also offers optional `demucs` and `soundfile` for local voice separation/background preservation. For non-interactive agents, first show a dry run:
 
 ```bash
 cinlink --json setup-local-deps --dry-run --with-voice-separation
@@ -49,7 +49,7 @@ cinlink --json onboarding --api-key <cinlink_api_key>
 Environment variables are also supported:
 
 ```bash
-export CINLINK_API_KEY="ck_live_or_test_xxx"
+export CINLINK_API_KEY="as_live_xxx"
 export CINLINK_RUNTIME_BASE="https://runtime.cinlink.ai"
 export CINLINK_BILLING_BASE="https://app.cinlink.ai"
 ```
@@ -97,6 +97,9 @@ cinlink --json tools schema dub
 cinlink --json tools schema setup_local_deps
 cinlink --json tools schema clean_cut
 cinlink --json tools schema brand_kit
+cinlink --json tools schema deconstruct_video
+cinlink --json tools schema export_editor_project
+cinlink --json tools schema agent_events
 ```
 
 Use JSON mode for all agent/automation calls.

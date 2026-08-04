@@ -1,6 +1,6 @@
 ---
 name: cinlink
-description: "READ THIS FIRST for any request to use CinLink media capabilities from an agent: transcribe videos, generate/translate/burn subtitles, dub videos, summarize or shorten media, remove pauses, trim or montage clips, apply watermarks/Brand Kits, generate AI images/videos, or run hosted CinLink agent workflows. Router and capability map for the CinLink domain skills. Hosted capabilities require a user-provided CinLink API key; local editing does not."
+description: "READ THIS FIRST for any request to use CinLink media capabilities from an agent: transcribe videos, generate/translate/burn subtitles, dub videos, summarize or shorten media, deconstruct or recreate videos, replace visual references, edit/export media, generate AI images/videos, or run hosted CinLink agent workflows. Router and capability map for the CinLink domain skills. Hosted capabilities require a user-provided CinLink API key; local editing/export does not."
 ---
 
 # CinLink — Start Here
@@ -13,10 +13,11 @@ CinLink exposes the app's media workflows to coding agents through the standalon
 | --- | --- |
 | Install/configure the CLI, store an API key, check runtime/local dependencies, inspect tool schemas | `/cinlink-cli` |
 | Add subtitles to a video, transcribe media, translate subtitles/media, burn styled subtitles into a local video | `/cinlink-subtitles` |
-| Remove pauses, trim exact ranges, create a montage, apply watermarks, configure/use a Brand Kit | `/cinlink-editing` |
+| Remove pauses, trim or montage clips, apply watermarks/Brand Kits, export video/audio/editor projects | `/cinlink-editing` |
 | Voice-translate/dub videos, generate dubbed audio, mix dubbed audio with the original video | `/cinlink-dubbing` |
 | Summarize videos, extract highlights, plan short clips from long videos | `/cinlink-understanding` |
 | Generate AI images or AI videos through the hosted runtime | `/cinlink-generation` |
+| Deconstruct a video, edit its shot plan, replace a person/product/scene, regenerate with continuity | `/cinlink-deconstruction` |
 | Submit broad natural-language media tasks to the hosted CinLink agent runtime | `/cinlink-agent` |
 
 ## Intent Routing
@@ -50,6 +51,8 @@ Route to `/cinlink-dubbing` for:
 
 For hosted dubbing, never upload a local video directly to `/v1/dub`; the current CLI extracts local audio first, then sends audio plus subtitles. Use `/cinlink-agent` for full app-style split dubbing plans that may need `synthesize_dub_audio` and local `compose_dubbed_video`.
 
+When shortening and dubbing are combined, finish the full-length dubbed timeline first, then render highlights from the dubbed video.
+
 ### Understanding Workflows
 
 Route to `/cinlink-understanding` for:
@@ -70,8 +73,21 @@ Route to `/cinlink-editing` for:
 - "combine these selected ranges into a montage"
 - "apply my logo/Brand Kit"
 - "add a local text or image watermark without subtitles"
+- "export this as MOV/AVI/MKV or WAV/MP3"
+- "make a CapCut/Premiere/Final Cut/Resolve project handoff"
 
 These operations are local-only and do not need an API key. They require local `ffmpeg`/`ffprobe`. Enabled Brand Kit settings automatically apply to later subtitle and watermark exports.
+
+### Deconstruction Workflows
+
+Route to `/cinlink-deconstruction` for:
+
+- "deconstruct this video's shots"
+- "show me the prompts/camera/action for each shot"
+- "replace the person, product, or scene in this video"
+- "recreate this video while preserving shot continuity"
+
+Deconstruction keeps the source video local and uploads only sampled frames. Shot regeneration is hosted, while continuity extraction and final assembly are local. Pass `--language` for human-readable analysis language and `--analysis-scope` when the user wants attention on camera, products, lighting, or another visual dimension.
 
 ### Generation Workflows
 
@@ -79,8 +95,10 @@ Route to `/cinlink-generation` for:
 
 - "generate an image"
 - "generate a video"
-- "use this reference image/video/audio URL"
+- "use this local reference image or reference image/video/audio URL"
 - "make a Seedance-style video" or other hosted provider generation request
+
+Image generation accepts up to three reference images; video generation accepts up to nine. Preserve exact artifact identity when the user selects one result among several.
 
 ## API Key Rule
 
@@ -97,7 +115,7 @@ Never echo the API key back to the user. For local-only tasks such as subtitle b
 
 CinLink is hosted-first. Provider credentials stay on the server. Local dependencies are only for local capabilities:
 
-- `ffmpeg`/`ffprobe`: subtitle burn, local audio extraction/mix, Clean Cut, trimming, montage, watermarking, local media probing
+- `ffmpeg`/`ffprobe`: subtitle burn, local audio extraction/mix, Clean Cut, trimming, montage, watermarking, video deconstruction/assembly, media export, editor project handoff, local media probing
 - `demucs` + `soundfile`: local voice separation/background preservation
 
 During install or reconnect, run `cinlink setup-local-deps` so the user is prompted to install local `ffmpeg` and optionally `demucs`/`soundfile`. In non-interactive contexts, show `cinlink --json setup-local-deps --dry-run --with-voice-separation` first, then install only after explicit confirmation.

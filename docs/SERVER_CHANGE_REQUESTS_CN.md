@@ -2,7 +2,7 @@
 
 本 CLI 没有修改主仓库和 Windows App。下面是为了让 agent 工具协议更完整，建议服务端同事后续在 `CinLink` 主仓中补的点。
 
-## 1. `/v1/agent/events/{run_id}` SSE
+## 1. `/v1/agent/runs/{run_id}/events` SSE（已接入）
 
 ## 0. 当前产品策略确认
 
@@ -16,36 +16,34 @@ CLI 已按下面策略实现：
 
 这意味着服务端同事不需要为了当前 CLI 立刻安装 Demucs；除非未来产品决定把人声分离也做成 hosted 能力。
 
-当前 CLI 可以轮询：
+当前 CLI 同时支持轮询和 SSE：
 
 ```text
 GET /v1/agent/runs/{run_id}
+GET /v1/agent/runs/{run_id}/events
 ```
 
-建议服务端补 SSE：
+CLI 会解析事件 ID、事件名和 JSON data，并支持通过 `Last-Event-ID` 续读。当前公开事件包括：
 
 ```text
-GET /v1/agent/events/{run_id}
-```
-
-事件类型建议：
-
-```text
-message_delta
-plan_updated
-tool_call_created
-artifact_created
-progress
+status
+thinking_delta
+reasoning_delta
+tool_start
+tool_complete
+run
 done
-failed
-requires_user_input
+error
 ```
 
-这样 CLI 可以加：
+调用方式：
 
 ```powershell
-cinlink --json agent stream run_xxx
+cinlink --json agent events run_xxx
+cinlink --json agent run "..." --wait --include-events
 ```
+
+`thinking_delta` 只作为临时进度，`reasoning_delta` 是可向用户公开的说明；服务端不应暴露模型隐藏思维链或内部 scratchpad。
 
 ## 2. Agent run 支持上传本地文件
 
@@ -188,7 +186,7 @@ auth_failed
 {
   "planner": {
     "backend": "gpt|hermes|deterministic",
-    "model": "gpt-5.4",
+    "model": "<server-selected-model>",
     "fallback_used": false
   }
 }

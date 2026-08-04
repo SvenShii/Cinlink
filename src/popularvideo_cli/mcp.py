@@ -15,6 +15,8 @@ from .config import (
     update_brand_kit,
 )
 from .dependencies import local_dependency_report, require_local_voice_separation_if_requested
+from .deconstruction import deconstruct_video, regenerate_deconstruction
+from .editor_exports import export_audio, export_editor_project, export_video
 from .errors import CliError
 from .local_setup import setup_local_dependencies
 from .local_tools import (
@@ -145,6 +147,9 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         "burn",
         "clean_cut",
         "doctor",
+        "export_audio",
+        "export_editor_project",
+        "export_video",
         "mix_dubbed_audio",
         "montage",
         "trim_video",
@@ -295,7 +300,15 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             music_prompt=args.get("music_prompt"),
         )
     if name == "image":
-        return client.image(args["prompt"], out=_path(args.get("out")), aspect_ratio=args.get("aspect_ratio", "1:1"), image_size=args.get("image_size", "1K"), model=args.get("model"))
+        return client.image(
+            args["prompt"],
+            out=_path(args.get("out")),
+            aspect_ratio=args.get("aspect_ratio", "1:1"),
+            image_size=args.get("image_size", "1K"),
+            reference_image_urls=args.get("reference_image_urls") or [],
+            model=args.get("model"),
+            timeout=_float_or_none(args.get("timeout")),
+        )
     if name == "video":
         return client.video(
             args["prompt"],
@@ -313,6 +326,58 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             model=args.get("model"),
             model_name=args.get("model_name"),
             model_version=args.get("model_version"),
+            timeout=_float_or_none(args.get("timeout")),
+        )
+    if name == "deconstruct_video":
+        return deconstruct_video(
+            client,
+            Path(args["video_path"]),
+            out=_path(args.get("out")),
+            replacement_references=_replacement_references(
+                args.get("replacement_references")
+            ),
+            language=str(args.get("language", "zh-Hans")),
+            analysis_scope=str(args.get("analysis_scope", "")),
+            scene_threshold=float(args.get("scene_threshold", 0.28)),
+            max_shots=int(args.get("max_shots", 120)),
+        )
+    if name == "regenerate_deconstruction":
+        return regenerate_deconstruction(
+            client,
+            Path(args["plan_path"]),
+            out=_path(args.get("out")),
+            replacement_references=_replacement_references(
+                args.get("replacement_references")
+            ),
+            resolution=str(args.get("resolution", "720P")),
+            preserve_original_audio=bool(
+                args.get("preserve_original_audio", True)
+            ),
+            model=args.get("model"),
+            model_name=args.get("model_name"),
+            model_version=args.get("model_version"),
+            timeout=_float_or_none(args.get("timeout")),
+        )
+    if name == "export_video":
+        return export_video(
+            Path(args["video_path"]),
+            output_format=str(args.get("output_format", "mp4")),
+            out=_path(args.get("out")),
+        )
+    if name == "export_audio":
+        return export_audio(
+            Path(args["video_path"]),
+            output_format=str(args.get("output_format", "wav")),
+            audio_path=_path(args.get("audio_path")),
+            out=_path(args.get("out")),
+        )
+    if name == "export_editor_project":
+        return export_editor_project(
+            Path(args["video_path"]),
+            target=str(args["target"]),
+            subtitle_path=_path(args.get("subtitle_path")),
+            audio_path=_path(args.get("audio_path")),
+            out=_path(args.get("out")),
         )
     if name == "nlu":
         return client.nlu(
@@ -340,8 +405,18 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             hidden_context=args.get("hidden_context"),
         )
         if args.get("wait") and created.get("run_id"):
-            return client.wait_for_agent_run(str(created["run_id"]), timeout=_float_or_none(args.get("timeout")))
+            return client.wait_for_agent_run(
+                str(created["run_id"]),
+                timeout=_float_or_none(args.get("timeout")),
+                include_events=bool(args.get("include_events", False)),
+            )
         return created
+    if name == "agent_events":
+        return client.stream_agent_events(
+            str(args["run_id"]),
+            last_event_id=args.get("last_event_id"),
+            timeout=_float_or_none(args.get("timeout")),
+        )
     raise CliError("invalid_input", f"Unsupported tool: {name}")
 
 
@@ -359,6 +434,32 @@ def _path_dict(value: Any) -> dict[str, Path]:
     if not isinstance(value, dict):
         return {}
     return {str(key): Path(str(item)) for key, item in value.items() if item is not None}
+
+
+def _replacement_references(value: Any) -> list[dict[str, str]]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise CliError(
+            "invalid_input",
+            "replacement_references must be a JSON array.",
+        )
+    references: list[dict[str, str]] = []
+    for index, item in enumerate(value):
+        if not isinstance(item, dict):
+            raise CliError(
+                "invalid_input",
+                f"replacement_references[{index}] must be a JSON object.",
+            )
+        role = str(item.get("role") or "").strip().lower()
+        path = str(item.get("path") or "").strip()
+        if role not in {"person", "product", "scene"} or not path:
+            raise CliError(
+                "invalid_input",
+                f"replacement_references[{index}] requires role person/product/scene and a path.",
+            )
+        references.append({"role": role, "path": path})
+    return references
 
 
 def _float_or_none(value: Any) -> float | None:

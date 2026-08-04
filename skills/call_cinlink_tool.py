@@ -29,8 +29,14 @@ def main() -> int:
             "shorten",
             "image",
             "video",
+            "deconstruct_video",
+            "regenerate_deconstruction",
+            "export_video",
+            "export_audio",
+            "export_editor_project",
             "nlu",
             "agent_run",
+            "agent_events",
         ],
     )
     parser.add_argument("--args-json", required=True, help="JSON object containing tool arguments.")
@@ -270,7 +276,10 @@ def build_command(tool: str, args: dict) -> list[str]:
             *optional("--out", args.get("out")),
         ]
     if tool == "image":
-        return base + ["image", args["prompt"], "--aspect-ratio", args.get("aspect_ratio", "1:1"), "--image-size", args.get("image_size", "1K"), *optional("--model", args.get("model")), *optional("--out", args.get("out"))]
+        command = base + ["image", args["prompt"], "--aspect-ratio", args.get("aspect_ratio", "1:1"), "--image-size", args.get("image_size", "1K")]
+        for url in args.get("reference_image_urls", []):
+            command.extend(["--reference-image-url", url])
+        return command + optional("--model", args.get("model")) + optional("--out", args.get("out")) + optional("--timeout", args.get("timeout"))
     if tool == "video":
         command = base + ["video", args["prompt"], "--aspect-ratio", args.get("aspect_ratio", "16:9"), "--duration", str(args.get("duration", 5))]
         if not args.get("generate_audio", True):
@@ -287,6 +296,76 @@ def build_command(tool: str, args: dict) -> list[str]:
         for url in args.get("reference_audio_urls", []):
             command.extend(["--reference-audio-url", url])
         return command + optional("--model", args.get("model")) + optional("--model-name", args.get("model_name")) + optional("--model-version", args.get("model_version")) + optional("--out", args.get("out")) + optional("--timeout", args.get("timeout"))
+    if tool == "deconstruct_video":
+        command = base + [
+            "deconstruct-video",
+            args["video_path"],
+            "--scene-threshold",
+            str(args.get("scene_threshold", 0.28)),
+            "--max-shots",
+            str(args.get("max_shots", 120)),
+            "--language",
+            args.get("language", "zh-Hans"),
+            *optional("--analysis-scope", args.get("analysis_scope")),
+            *optional("--out", args.get("out")),
+        ]
+        for reference in args.get("replacement_references", []):
+            command.extend(
+                [
+                    "--replacement-reference",
+                    f"{reference['role']}={reference['path']}",
+                ]
+            )
+        return command
+    if tool == "regenerate_deconstruction":
+        command = base + [
+            "regenerate-deconstruction",
+            args["plan_path"],
+            "--resolution",
+            args.get("resolution", "720P"),
+            *optional("--model", args.get("model")),
+            *optional("--model-name", args.get("model_name")),
+            *optional("--model-version", args.get("model_version")),
+            *optional("--out", args.get("out")),
+            *optional("--timeout", args.get("timeout")),
+        ]
+        if args.get("preserve_original_audio") is False:
+            command.append("--no-original-audio")
+        for reference in args.get("replacement_references", []):
+            command.extend(
+                [
+                    "--replacement-reference",
+                    f"{reference['role']}={reference['path']}",
+                ]
+            )
+        return command
+    if tool == "export_video":
+        return base + [
+            "export-video",
+            args["video_path"],
+            "--format",
+            args.get("output_format", "mp4"),
+            *optional("--out", args.get("out")),
+        ]
+    if tool == "export_audio":
+        return base + [
+            "export-audio",
+            args["video_path"],
+            "--format",
+            args.get("output_format", "wav"),
+            *optional("--audio-source", args.get("audio_path")),
+            *optional("--out", args.get("out")),
+        ]
+    if tool == "export_editor_project":
+        return base + [
+            "export-editor-project",
+            args["video_path"],
+            "--target",
+            args["target"],
+            *optional("--subtitle", args.get("subtitle_path")),
+            *optional("--audio-source", args.get("audio_path")),
+            *optional("--out", args.get("out")),
+        ]
     if tool == "nlu":
         command = base + ["nlu", args["prompt"]]
         if args.get("has_video"):
@@ -314,8 +393,18 @@ def build_command(tool: str, args: dict) -> list[str]:
             command.extend(["--conversation-state-json", json.dumps(args["conversation_state"], ensure_ascii=False)])
         if args.get("wait"):
             command.append("--wait")
+        if args.get("include_events"):
+            command.append("--include-events")
         command.extend(optional("--timeout", args.get("timeout")))
         return command
+    if tool == "agent_events":
+        return base + [
+            "agent",
+            "events",
+            args["run_id"],
+            *optional("--last-event-id", args.get("last_event_id")),
+            *optional("--timeout", args.get("timeout")),
+        ]
     raise ValueError(f"Unsupported tool: {tool}")
 
 

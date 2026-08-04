@@ -33,6 +33,8 @@ For a complete dubbed MP4, generate dubbed audio first and then run `mix-dubbed-
 
 When selecting outputs for the next step, prefer `artifact_role=dubbed_audio` for local composition and `artifact_role=dubbed_video` for a completed video. Preserve `producer_step` when reporting local results.
 
+For a request that both shortens and dubs a video, preserve the original timeline through synthesis: extract/transcribe/translate/synthesize the full-length source, compose the full-length dubbed video, then render the selected highlight clips. Do not mix full-length dubbed audio into an already-shortened video.
+
 ## Mix Dubbed Audio
 
 For "mix this dubbed audio back into the video":

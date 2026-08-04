@@ -27,6 +27,11 @@
       "tool_arg": "agent_run"
     },
     {
+      "name": "cinlink_agent_events",
+      "description": "Read public planning and reasoning events for a hosted CinLink agent run.",
+      "tool_arg": "agent_events"
+    },
+    {
       "name": "cinlink_transcribe",
       "description": "Transcribe a local media file into subtitles.",
       "tool_arg": "transcribe"
@@ -93,13 +98,38 @@
     },
     {
       "name": "cinlink_image",
-      "description": "Generate an image from a prompt.",
+      "description": "Generate an image from a prompt and up to three local or remote reference images.",
       "tool_arg": "image"
     },
     {
       "name": "cinlink_video",
-      "description": "Generate a video from a prompt.",
+      "description": "Generate a video from a prompt and optional local or remote references.",
       "tool_arg": "video"
+    },
+    {
+      "name": "cinlink_deconstruct_video",
+      "description": "Turn a local video into an editable hosted shot-deconstruction plan with language and analysis-scope controls.",
+      "tool_arg": "deconstruct_video"
+    },
+    {
+      "name": "cinlink_regenerate_deconstruction",
+      "description": "Regenerate a deconstruction plan shot by shot with optional visual replacements.",
+      "tool_arg": "regenerate_deconstruction"
+    },
+    {
+      "name": "cinlink_export_video",
+      "description": "Export a local video as MP4, MOV, AVI, or MKV.",
+      "tool_arg": "export_video"
+    },
+    {
+      "name": "cinlink_export_audio",
+      "description": "Export local video or replacement audio as WAV or MP3.",
+      "tool_arg": "export_audio"
+    },
+    {
+      "name": "cinlink_export_editor_project",
+      "description": "Create a local CapCut, Premiere, Final Cut, or Resolve project handoff.",
+      "tool_arg": "export_editor_project"
     },
     {
       "name": "cinlink_nlu",

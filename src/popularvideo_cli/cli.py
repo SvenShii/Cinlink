@@ -16,6 +16,8 @@ from .config import (
     update_brand_kit,
 )
 from .dependencies import local_dependency_report, require_local_voice_separation_if_requested
+from .deconstruction import deconstruct_video, regenerate_deconstruction
+from .editor_exports import export_audio, export_editor_project, export_video
 from .errors import CliError
 from .local_setup import setup_local_dependencies
 from .local_tools import (
@@ -248,7 +250,14 @@ def build_parser() -> argparse.ArgumentParser:
     image.add_argument("--out")
     image.add_argument("--aspect-ratio", default="1:1")
     image.add_argument("--image-size", default="1K")
+    image.add_argument(
+        "--reference-image-url",
+        action="append",
+        default=[],
+        dest="reference_image_urls",
+    )
     image.add_argument("--model")
+    image.add_argument("--timeout", type=float)
 
     video = subparsers.add_parser("video")
     video.add_argument("prompt")
@@ -267,6 +276,74 @@ def build_parser() -> argparse.ArgumentParser:
     video.add_argument("--model-name")
     video.add_argument("--model-version")
     video.add_argument("--timeout", type=float)
+
+    deconstruct = subparsers.add_parser("deconstruct-video")
+    deconstruct.add_argument("video_path")
+    deconstruct.add_argument("--out")
+    deconstruct.add_argument(
+        "--replacement-reference",
+        action="append",
+        default=[],
+        metavar="ROLE=PATH",
+        help="Optional person, product, or scene replacement reference.",
+    )
+    deconstruct.add_argument("--scene-threshold", type=float, default=0.28)
+    deconstruct.add_argument("--max-shots", type=int, default=120)
+    deconstruct.add_argument("--language", default="zh-Hans")
+    deconstruct.add_argument("--analysis-scope", default="")
+
+    regenerate = subparsers.add_parser("regenerate-deconstruction")
+    regenerate.add_argument("plan_path")
+    regenerate.add_argument("--out")
+    regenerate.add_argument(
+        "--replacement-reference",
+        action="append",
+        default=[],
+        metavar="ROLE=PATH",
+        help="Optional person, product, or scene replacement reference.",
+    )
+    regenerate.add_argument("--resolution", default="720P")
+    regenerate.add_argument(
+        "--no-original-audio",
+        action="store_false",
+        dest="preserve_original_audio",
+    )
+    regenerate.add_argument("--model")
+    regenerate.add_argument("--model-name")
+    regenerate.add_argument("--model-version")
+    regenerate.add_argument("--timeout", type=float)
+
+    export_video_parser = subparsers.add_parser("export-video")
+    export_video_parser.add_argument("video_path")
+    export_video_parser.add_argument(
+        "--format",
+        choices=["mp4", "mov", "avi", "mkv"],
+        default="mp4",
+        dest="output_format",
+    )
+    export_video_parser.add_argument("--out")
+
+    export_audio_parser = subparsers.add_parser("export-audio")
+    export_audio_parser.add_argument("video_path")
+    export_audio_parser.add_argument(
+        "--format",
+        choices=["wav", "mp3"],
+        default="wav",
+        dest="output_format",
+    )
+    export_audio_parser.add_argument("--audio-source", dest="audio_path")
+    export_audio_parser.add_argument("--out")
+
+    export_project = subparsers.add_parser("export-editor-project")
+    export_project.add_argument("video_path")
+    export_project.add_argument(
+        "--target",
+        choices=["capcut", "premiere", "final-cut", "resolve"],
+        required=True,
+    )
+    export_project.add_argument("--subtitle", dest="subtitle_path")
+    export_project.add_argument("--audio-source", dest="audio_path")
+    export_project.add_argument("--out")
 
     nlu = subparsers.add_parser("nlu")
     nlu.add_argument("prompt")
@@ -292,9 +369,18 @@ def build_parser() -> argparse.ArgumentParser:
     run.add_argument("--task-parameters-json", default="{}")
     run.add_argument("--conversation-state-json", default="{}")
     run.add_argument("--wait", action="store_true")
+    run.add_argument(
+        "--include-events",
+        action="store_true",
+        help="Include public planning and reasoning events in the completed response.",
+    )
     run.add_argument("--timeout", type=float)
     poll = agent_subparsers.add_parser("poll")
     poll.add_argument("run_id")
+    events = agent_subparsers.add_parser("events")
+    events.add_argument("run_id")
+    events.add_argument("--last-event-id")
+    events.add_argument("--timeout", type=float)
     local_tools = agent_subparsers.add_parser("local-tools")
     local_tools.add_argument("run_id")
     local_tools.add_argument("--device-id")
@@ -404,6 +490,9 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         "brand-kit",
         "burn",
         "clean-cut",
+        "export-audio",
+        "export-editor-project",
+        "export-video",
         "mix-dubbed-audio",
         "montage",
         "trim-video",
@@ -537,7 +626,15 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             music_prompt=args.music_prompt,
         )
     if args.command == "image":
-        return client.image(args.prompt, out=_path_or_none(args.out), aspect_ratio=args.aspect_ratio, image_size=args.image_size, model=args.model)
+        return client.image(
+            args.prompt,
+            out=_path_or_none(args.out),
+            aspect_ratio=args.aspect_ratio,
+            image_size=args.image_size,
+            reference_image_urls=args.reference_image_urls,
+            model=args.model,
+            timeout=args.timeout,
+        )
     if args.command == "video":
         return client.video(
             args.prompt,
@@ -556,6 +653,55 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             model_name=args.model_name,
             model_version=args.model_version,
             timeout=args.timeout,
+        )
+    if args.command == "deconstruct-video":
+        return deconstruct_video(
+            client,
+            Path(args.video_path),
+            out=_path_or_none(args.out),
+            replacement_references=_parse_replacement_references(
+                args.replacement_reference
+            ),
+            language=args.language,
+            analysis_scope=args.analysis_scope,
+            scene_threshold=args.scene_threshold,
+            max_shots=args.max_shots,
+        )
+    if args.command == "regenerate-deconstruction":
+        return regenerate_deconstruction(
+            client,
+            Path(args.plan_path),
+            out=_path_or_none(args.out),
+            replacement_references=_parse_replacement_references(
+                args.replacement_reference
+            ),
+            resolution=args.resolution,
+            preserve_original_audio=args.preserve_original_audio,
+            model=args.model,
+            model_name=args.model_name,
+            model_version=args.model_version,
+            timeout=args.timeout,
+        )
+    if args.command == "export-video":
+        return export_video(
+            Path(args.video_path),
+            output_format=args.output_format,
+            out=_path_or_none(args.out),
+        )
+    if args.command == "export-audio":
+        return export_audio(
+            Path(args.video_path),
+            output_format=args.output_format,
+            audio_path=_path_or_none(args.audio_path),
+            out=_path_or_none(args.out),
+        )
+    if args.command == "export-editor-project":
+        return export_editor_project(
+            Path(args.video_path),
+            target=args.target,
+            subtitle_path=_path_or_none(args.subtitle_path),
+            audio_path=_path_or_none(args.audio_path),
+            out=_path_or_none(args.out),
         )
     if args.command == "nlu":
         return client.nlu(args.prompt, has_video=args.has_video, has_subtitle=args.has_subtitle, pending_target_language=args.pending_target_language, context_files=args.context_file)
@@ -585,10 +731,20 @@ def run_agent_command(args: argparse.Namespace, client: RuntimeClient) -> dict[s
             hidden_context=hidden_context,
         )
         if args.wait and created.get("run_id"):
-            return client.wait_for_agent_run(str(created["run_id"]), timeout=args.timeout)
+            return client.wait_for_agent_run(
+                str(created["run_id"]),
+                timeout=args.timeout,
+                include_events=args.include_events,
+            )
         return created
     if args.agent_command == "poll":
         return client.get_agent_run(args.run_id)
+    if args.agent_command == "events":
+        return client.stream_agent_events(
+            args.run_id,
+            last_event_id=args.last_event_id,
+            timeout=args.timeout,
+        )
     if args.agent_command == "local-tools":
         return client.list_local_tool_calls(args.run_id, device_id=args.device_id)
     if args.agent_command == "report-tool-result":
@@ -616,6 +772,31 @@ def run_agent_command(args: argparse.Namespace, client: RuntimeClient) -> dict[s
 
 def _path_or_none(value: str | None) -> Path | None:
     return Path(value) if value else None
+
+
+def _parse_replacement_references(values: list[str]) -> list[dict[str, str]]:
+    references: list[dict[str, str]] = []
+    for value in values:
+        if "=" not in value:
+            raise CliError(
+                "invalid_input",
+                "--replacement-reference must use ROLE=PATH.",
+            )
+        role, path = value.split("=", 1)
+        normalized_role = role.strip().lower()
+        normalized_path = path.strip()
+        if normalized_role not in {"person", "product", "scene"}:
+            raise CliError(
+                "invalid_input",
+                "Replacement reference role must be person, product, or scene.",
+            )
+        if not normalized_path:
+            raise CliError(
+                "invalid_input",
+                "Replacement reference path cannot be empty.",
+            )
+        references.append({"role": normalized_role, "path": normalized_path})
+    return references
 
 
 def _parse_json_object(text: str) -> dict[str, Any]:

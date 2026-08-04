@@ -10,7 +10,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "type": "object",
             "required": ["api_key"],
             "properties": {
-                "api_key": {"type": "string", "description": "CinLink API key, for example ck_live_or_test_xxx."},
+                "api_key": {"type": "string", "description": "CinLink API key, for example as_live_xxx."},
                 "runtime_base": {"type": "string", "default": "https://runtime.cinlink.ai"},
                 "billing_base": {"type": "string", "default": "https://app.cinlink.ai"},
             },
@@ -342,7 +342,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "output_schema": {"type": "object"},
     },
     "image": {
-        "description": "Generate an image from a text prompt.",
+        "description": "Generate an image from a text prompt and up to three remote or local reference images. Local references are uploaded through the authenticated CinLink reference-image endpoint.",
         "input_schema": {
             "type": "object",
             "required": ["prompt"],
@@ -351,13 +351,20 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "out": {"type": "string"},
                 "aspect_ratio": {"type": "string", "default": "1:1"},
                 "image_size": {"type": "string", "default": "1K"},
+                "reference_image_urls": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 3,
+                    "description": "Remote URLs or absolute local image paths.",
+                },
                 "model": {"type": "string"},
+                "timeout": {"type": "number", "default": 1800},
             },
         },
         "output_schema": {"type": "object"},
     },
     "video": {
-        "description": "Generate a video from a text prompt or remote references.",
+        "description": "Generate a video from a text prompt or image/video/audio references. Local first-frame and reference image paths are uploaded through the authenticated CinLink reference-image endpoint before generation.",
         "input_schema": {
             "type": "object",
             "required": ["prompt"],
@@ -374,16 +381,198 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                     "enum": ["text", "first_frame", "reference"],
                     "description": "Optional. Defaults to first_frame for a first-frame URL, reference for other reference URLs, otherwise text.",
                 },
-                "first_frame_image_url": {"type": "string"},
-                "reference_image_urls": {"type": "array", "items": {"type": "string"}},
+                "first_frame_image_url": {
+                    "type": "string",
+                    "description": "Remote URL or absolute local image path.",
+                },
+                "reference_image_urls": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "maxItems": 9,
+                    "description": "Remote URLs or absolute local image paths.",
+                },
                 "reference_video_urls": {"type": "array", "items": {"type": "string"}},
                 "reference_audio_urls": {"type": "array", "items": {"type": "string"}},
                 "model": {"type": "string"},
                 "model_name": {"type": "string"},
                 "model_version": {"type": "string"},
+                "timeout": {"type": "number", "default": 1800},
             },
         },
         "output_schema": {"type": "object"},
+    },
+    "deconstruct_video": {
+        "description": "Deconstruct a local video into an editable shot plan. The full video stays local; CinLink samples scene frames locally and sends only those frames to the hosted deconstruction runtime.",
+        "input_schema": {
+            "type": "object",
+            "required": ["video_path"],
+            "properties": {
+                "video_path": {"type": "string"},
+                "out": {
+                    "type": "string",
+                    "description": "Output directory or deconstruction.json path.",
+                },
+                "replacement_references": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": {
+                        "type": "object",
+                        "required": ["role", "path"],
+                        "properties": {
+                            "role": {
+                                "type": "string",
+                                "enum": ["person", "product", "scene"],
+                            },
+                            "path": {"type": "string"},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+                "language": {
+                    "type": "string",
+                    "default": "zh-Hans",
+                    "maxLength": 32,
+                    "description": "Language for titles, summaries, style analysis, and audio prompt. Generation prompts remain model-friendly English.",
+                },
+                "analysis_scope": {
+                    "type": "string",
+                    "default": "",
+                    "maxLength": 2000,
+                    "description": "Optional focus such as camera movement, product presentation, lighting, or transitions.",
+                },
+                "scene_threshold": {
+                    "type": "number",
+                    "default": 0.28,
+                    "minimum": 0,
+                    "maximum": 1,
+                },
+                "max_shots": {
+                    "type": "integer",
+                    "default": 120,
+                    "minimum": 1,
+                    "maximum": 120,
+                },
+            },
+        },
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "plan_path": {"type": "string"},
+                "source_video_path": {"type": "string"},
+                "shot_count": {"type": "integer"},
+                "privacy_receipt": {"type": "object"},
+            },
+        },
+    },
+    "regenerate_deconstruction": {
+        "description": "Regenerate an editable CinLink deconstruction plan shot by shot, optionally replacing a person, product, or scene. Generated shots use the hosted runtime; continuity and final assembly happen locally.",
+        "input_schema": {
+            "type": "object",
+            "required": ["plan_path"],
+            "properties": {
+                "plan_path": {"type": "string"},
+                "out": {"type": "string"},
+                "replacement_references": {
+                    "type": "array",
+                    "maxItems": 8,
+                    "items": {
+                        "type": "object",
+                        "required": ["role", "path"],
+                        "properties": {
+                            "role": {
+                                "type": "string",
+                                "enum": ["person", "product", "scene"],
+                            },
+                            "path": {"type": "string"},
+                        },
+                        "additionalProperties": False,
+                    },
+                },
+                "resolution": {"type": "string", "default": "720P"},
+                "preserve_original_audio": {
+                    "type": "boolean",
+                    "default": True,
+                },
+                "model": {"type": "string"},
+                "model_name": {"type": "string"},
+                "model_version": {"type": "string"},
+                "timeout": {"type": "number", "default": 1800},
+            },
+        },
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "video_output_path": {"type": "string"},
+                "plan_path": {"type": "string"},
+                "primary_artifacts": {"type": "array"},
+                "supporting_artifacts": {"type": "array"},
+                "privacy_receipt": {"type": "object"},
+            },
+        },
+    },
+    "export_video": {
+        "description": "Export a local edited video as MP4, MOV, AVI, or MKV with ffmpeg. No CinLink API key or cloud upload is required.",
+        "input_schema": {
+            "type": "object",
+            "required": ["video_path"],
+            "properties": {
+                "video_path": {"type": "string"},
+                "output_format": {
+                    "type": "string",
+                    "enum": ["mp4", "mov", "avi", "mkv"],
+                    "default": "mp4",
+                },
+                "out": {"type": "string"},
+            },
+        },
+        "output_schema": {"type": "object"},
+    },
+    "export_audio": {
+        "description": "Export audio from a local video, or from a supplied local replacement audio track, as WAV or MP3. No CinLink API key or cloud upload is required.",
+        "input_schema": {
+            "type": "object",
+            "required": ["video_path"],
+            "properties": {
+                "video_path": {"type": "string"},
+                "audio_path": {"type": "string"},
+                "output_format": {
+                    "type": "string",
+                    "enum": ["wav", "mp3"],
+                    "default": "wav",
+                },
+                "out": {"type": "string"},
+            },
+        },
+        "output_schema": {"type": "object"},
+    },
+    "export_editor_project": {
+        "description": "Create a local editor handoff for CapCut, Adobe Premiere Pro, Final Cut Pro, or DaVinci Resolve. CinLink creates portable media/XML/FCPXML/SRT assets but does not launch desktop editor applications.",
+        "input_schema": {
+            "type": "object",
+            "required": ["video_path", "target"],
+            "properties": {
+                "video_path": {"type": "string"},
+                "target": {
+                    "type": "string",
+                    "enum": ["capcut", "premiere", "final-cut", "resolve"],
+                },
+                "subtitle_path": {"type": "string"},
+                "audio_path": {"type": "string"},
+                "out": {
+                    "type": "string",
+                    "description": "Output directory.",
+                },
+            },
+        },
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "project_output_path": {"type": "string"},
+                "package_path": {"type": ["string", "null"]},
+                "primary_artifacts": {"type": "array"},
+                "supporting_artifacts": {"type": "array"},
+            },
+        },
     },
     "nlu": {
         "description": "Route a natural-language media task into an action.",
@@ -442,12 +631,12 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "mode": {"type": "string", "enum": ["plan", "execute"], "default": "execute"},
                 "task_intent": {
                     "type": "string",
-                    "description": "High-priority app-surface intent, for example add_subtitles, translate_and_burn_subtitles, dub_video, summarize_video, shorten_video, generate_image, or generate_video.",
+                    "description": "High-priority app-surface intent, for example add_subtitles, translate_and_burn_subtitles, dub_video, summarize_video, shorten_video, deconstruct_video, edit_video, watermark, enhance_video, multi_video_montage, generate_image, or generate_video.",
                 },
                 "task_parameters": {
                     "type": "object",
                     "additionalProperties": {"type": "string"},
-                    "description": "Explicit app slot values such as output_delivery=burned_video, target_language=en, source_language=auto, subtitle_language=en, or translation_mode=subtitle.",
+                    "description": "Explicit app slot values such as output_delivery=burned_video, target_language=en, source_language=auto, subtitle_language=en, translation_mode=subtitle, analysis_scope=camera, or target_duration_sec=30.",
                 },
                 "conversation_state": {
                     "type": "object",
@@ -455,10 +644,44 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                     "description": "Optional persisted agent state. Current prompt and task_parameters override historical defaults.",
                 },
                 "wait": {"type": "boolean", "default": False},
+                "include_events": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "When waiting, include public planning/reasoning events. Hidden model scratch work is never exposed.",
+                },
                 "timeout": {"type": "number", "default": 1800},
             },
         },
-        "output_schema": {"type": "object"},
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "completion_message": {"type": ["string", "null"]},
+                "completion_title": {"type": ["string", "null"]},
+                "primary_artifacts": {"type": "array"},
+                "supporting_artifacts": {"type": "array"},
+                "intermediate_artifacts": {"type": "array"},
+                "agent_events": {"type": "array"},
+            },
+        },
+    },
+    "agent_events": {
+        "description": "Read the hosted agent's public SSE planning and reasoning event stream for a run. This returns user-facing progress events, not private model scratch work.",
+        "input_schema": {
+            "type": "object",
+            "required": ["run_id"],
+            "properties": {
+                "run_id": {"type": "string"},
+                "last_event_id": {"type": "string"},
+                "timeout": {"type": "number"},
+            },
+        },
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "run_id": {"type": "string"},
+                "events": {"type": "array"},
+            },
+        },
     },
 }
 

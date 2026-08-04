@@ -71,14 +71,14 @@ powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -SkipApiK
 安装时推荐直接写入 CLI 用户配置。这样用户只安装 skills、没有仓库目录时也能用：
 
 ```powershell
-cinlink --json onboarding --api-key ck_live_or_test_xxx
+cinlink --json onboarding --api-key as_live_xxx
 cinlink setup-local-deps
 cinlink --json doctor
 ```
 
 `cinlink setup-local-deps` 会检测并提示安装本地依赖：
 
-- `ffmpeg`/`ffprobe`：字幕烧录、本地抽音频、音频混合、Clean Cut、精确裁剪、混剪、水印和本地媒体检查。
+- `ffmpeg`/`ffprobe`：字幕烧录、本地抽音频、音频混合、Clean Cut、精确裁剪、混剪、水印、视频拆解/拼接、音视频导出、剪辑工程交接和本地媒体检查。
 - `demucs` + `soundfile`：可选，仅本地人声分离/保留背景音需要。
 
 非交互安装时先展示 dry run：
@@ -99,7 +99,7 @@ cinlink setup-local-deps --yes --with-voice-separation
 也可以不写配置文件，直接给 agent 配环境变量：
 
 ```powershell
-$env:CINLINK_API_KEY="ck_live_or_test_xxx"
+$env:CINLINK_API_KEY="as_live_xxx"
 $env:CINLINK_RUNTIME_BASE="https://runtime.cinlink.ai"
 $env:CINLINK_BILLING_BASE="https://app.cinlink.ai"
 ```
@@ -127,6 +127,9 @@ cinlink --json tools schema agent_run
 cinlink --json tools schema setup_local_deps
 cinlink --json tools schema clean_cut
 cinlink --json tools schema brand_kit
+cinlink --json tools schema deconstruct_video
+cinlink --json tools schema export_editor_project
+cinlink --json tools schema agent_events
 ```
 
 跑一个 NLU：
@@ -140,6 +143,13 @@ cinlink --json nlu "把这个视频翻译成英文字幕" --has-video
 ```powershell
 cinlink --json agent run "把这个视频总结成 5 条卖点" --context-file "D:\videos\demo.mp4" --app-language zh
 cinlink --json agent run "给这个视频加英文字幕，并输出带字幕视频" --context-file "D:\videos\demo.mp4" --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait
+```
+
+等待任务时可用 `--include-events` 收集公开的规划/推理进度，也可以单独读取 SSE：
+
+```powershell
+cinlink --json agent run \"分析并处理视频\" --wait --include-events
+cinlink --json agent events run_xxx
 ```
 
 如果返回：
@@ -185,13 +195,28 @@ cinlink --json brand-kit set --enable --font-name Arial --watermark-image "D:\br
 cinlink --json apply-watermark "D:\videos\demo.mp4"
 cinlink --json summarize "D:\videos\demo.mp4"
 cinlink --json shorten "D:\videos\demo.mp4" --target-duration 45
-cinlink --json image "小红书风格的美食封面图"
+cinlink --json image "把这个产品改成小红书风格封面图" --reference-image-url "D:\brand\product.png"
 cinlink --json video "5 秒产品展示视频，干净背景"
 cinlink --json agent run "把这个视频剪成 3 个 15 秒短视频" --context-file "D:\videos\demo.mp4"
 cinlink --json agent run "给这个视频加英文字幕，并输出带字幕视频" --context-file "D:\videos\demo.mp4" --client-request-id request_123 --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait
 ```
 
-新版 hosted runtime 在转写、视频翻译、总结、短视频规划和配音流程中都不再接收完整视频。CLI 收到本地视频后会先用本地 `ffmpeg` 抽取音频，只把音频发给服务端，完整视频保留在用户机器上。多说话人配音参考音频用重复的 `--reference-audio speaker_id=path`。
+新增的视频拆解、视觉替换和导出命令：
+
+```powershell
+cinlink --json video \"让这个产品动起来\" --first-frame-image-url \"D:\\brand\\product.png\"
+cinlink --json deconstruct-video \"D:\\videos\\demo.mp4\" --language zh-Hans --analysis-scope \"镜头运动、产品展示和灯光\" --out \"D:\\videos\\deconstruction\"
+cinlink --json regenerate-deconstruction \"D:\\videos\\deconstruction\\deconstruction.json\" --replacement-reference \"product=D:\\brand\\new-product.png\"
+cinlink --json export-video \"D:\\videos\\demo.mp4\" --format mov
+cinlink --json export-audio \"D:\\videos\\demo.mp4\" --format mp3
+cinlink --json export-editor-project \"D:\\videos\\demo.mp4\" --target premiere --subtitle \"D:\\videos\\demo.srt\"
+```
+
+新版 hosted runtime 在转写、视频翻译、总结、短视频规划、配音和视觉拆解流程中都不接收完整视频。音频工作流只上传本地抽取的音频；视频拆解只上传采样帧。图片生成最多接收 3 张参考图，视频生成最多接收 9 张参考图；URL 或本地路径均可，本地图片会经鉴权的参考图接口上传。多说话人配音参考音频用重复的 `--reference-audio speaker_id=path`。
+
+Agent 同时收到一个视频和一份有效的 SRT/VTT/ASS 时，CLI 会把字幕标记为可复用并绑定来源视频，避免重复转写。有多份字幕或图片时，应通过 `--context-json` 保留 id、语言、artifact role、来源 lineage、`cloud_file_id` 和 `public_url`。如果任务同时要求缩短和配音，要先在原始完整时间轴上完成配音合成，再剪高光，不能把完整配音音轨直接混入已经缩短的视频。
+
+Agent 完成时优先把 `completion_message` 给用户，并把 `primary_artifacts` 作为最终结果；`supporting_artifacts` 只在有帮助时补充，`intermediate_artifacts` 不作为最终交付。
 
 Agent 调用应该传 `--app-language zh|en|ja`。继续使用之前的生成结果时，用 `--context-json` 保留 `public_url`、`cloud_file_id`、`artifact_role` 和 `producer_step`，不要只留下一个本地文件名。
 
@@ -240,7 +265,7 @@ D:\工作\Video Agent\code\CinLinkCLI\skills\hermes\cinlink_tools.yaml
       "command": "cinlink-mcp",
       "args": [],
       "env": {
-        "CINLINK_API_KEY": "ck_live_or_test_xxx"
+        "CINLINK_API_KEY": "as_live_xxx"
       }
     }
   }
@@ -258,6 +283,12 @@ trim_video
 montage
 clean_cut
 brand_kit
+deconstruct_video
+regenerate_deconstruction
+export_video
+export_audio
+export_editor_project
+agent_events
 summarize
 shorten
 image

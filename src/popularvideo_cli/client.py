@@ -188,11 +188,49 @@ class RuntimeClient:
         )
         return _annotate_local_media_payload(payload, checked, cloud_step="shorten_video")
 
-    def image(self, prompt: str, out: Path | None = None, aspect_ratio: str = "1:1", image_size: str = "1K", model: str | None = None) -> dict[str, Any]:
-        return self._request(
+    def image(
+        self,
+        prompt: str,
+        out: Path | None = None,
+        aspect_ratio: str = "1:1",
+        image_size: str = "1K",
+        reference_image_urls: list[str] | None = None,
+        model: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        if len(reference_image_urls or []) > 3:
+            raise CliError(
+                "invalid_input",
+                "Image generation supports at most 3 reference images.",
+            )
+        uploaded_references = self._upload_reference_images_if_needed(
+            reference_image_urls or []
+        )
+        payload = self._request(
             "POST",
             "/v1/image",
-            json_body=_compact({"prompt": prompt, "output_dir": str(out) if out else None, "aspect_ratio": aspect_ratio, "image_size": image_size, "model": model}),
+            json_body=_compact(
+                {
+                    "prompt": prompt,
+                    "output_dir": str(out) if out else None,
+                    "aspect_ratio": aspect_ratio,
+                    "image_size": image_size,
+                    "reference_image_urls": uploaded_references,
+                    "model": model,
+                }
+            ),
+        )
+        if isinstance(payload, dict) and "job_id" in payload:
+            result = self.wait_for_job(
+                payload["job_id"], timeout or self.settings.timeout_sec
+            )
+        else:
+            result = payload
+        return self._localize_generated_file(
+            result,
+            out or Path.cwd() / "cinlink-generated-images",
+            path_key="image_path",
+            source_url_key="source_url",
         )
 
     def video(
@@ -214,11 +252,20 @@ class RuntimeClient:
         model_version: str | None = None,
         timeout: float | None = None,
     ) -> dict[str, Any]:
+        if len(reference_image_urls or []) > 9:
+            raise CliError(
+                "invalid_input",
+                "Video generation supports at most 9 reference images.",
+            )
+        uploaded_first_frame = self._upload_reference_images_if_needed(
+            [first_frame_image_url] if first_frame_image_url else []
+        )
+        uploaded_reference_images = self._upload_reference_images_if_needed(reference_image_urls or [])
         effective_generation_mode = generation_mode or (
-            "first_frame"
-            if first_frame_image_url
-            else "reference"
-            if reference_image_urls or reference_video_urls or reference_audio_urls
+            "reference"
+            if uploaded_reference_images or reference_video_urls or reference_audio_urls
+            else "first_frame"
+            if uploaded_first_frame
             else "text"
         )
         payload = self._request(
@@ -234,8 +281,8 @@ class RuntimeClient:
                     "generate_audio": generate_audio,
                     "watermark": watermark,
                     "generation_mode": effective_generation_mode,
-                    "first_frame_image_url": first_frame_image_url,
-                    "reference_image_urls": reference_image_urls or [],
+                    "first_frame_image_url": uploaded_first_frame[0] if uploaded_first_frame else None,
+                    "reference_image_urls": uploaded_reference_images,
                     "reference_video_urls": reference_video_urls or [],
                     "reference_audio_urls": reference_audio_urls or [],
                     "model": model,
@@ -249,6 +296,9 @@ class RuntimeClient:
         else:
             result = payload
         return self._localize_generated_file(result, out or Path.cwd() / "cinlink-generated-videos", path_key="video_path", source_url_key="source_url")
+
+    def deconstruct_frames(self, payload: dict[str, Any]) -> dict[str, Any]:
+        return self._request("POST", "/v1/videos/deconstruct", json_body=payload)
 
     def nlu(
         self,
@@ -288,6 +338,7 @@ class RuntimeClient:
         request_files = [_context_file_payload(path) for path in (context_files or [])]
         request_files.extend(_context_descriptor_payload(item) for item in (context_descriptors or []))
         request_files = _dedupe_context_files(request_files)
+        request_files = _annotate_context_relationships(request_files)
         capabilities = dict(client_capabilities if client_capabilities is not None else default_client_capabilities())
         if task_intent and task_intent.strip():
             capabilities["trusted_fixed_workflow_routing"] = True
@@ -310,13 +361,104 @@ class RuntimeClient:
         )
 
     def get_agent_run(self, run_id: str) -> dict[str, Any]:
-        return _with_agent_privacy_receipt(self._request("GET", f"/v1/agent/runs/{run_id}"))
+        payload = self._request("GET", f"/v1/agent/runs/{run_id}")
+        return _with_agent_privacy_receipt(_with_agent_delivery(payload))
 
-    def wait_for_agent_run(self, run_id: str, timeout: float | None = None) -> dict[str, Any]:
+    def stream_agent_events(
+        self,
+        run_id: str,
+        *,
+        last_event_id: str | None = None,
+        timeout: float | None = None,
+    ) -> dict[str, Any]:
+        try:
+            import httpx
+        except ImportError as exc:
+            raise CliError(
+                "dependency_missing",
+                "The Python package `httpx` is required for CinLink Agent events.",
+            ) from exc
+
+        headers = dict(self.settings.auth_headers)
+        if last_event_id:
+            headers["Last-Event-ID"] = last_event_id
+        stream_timeout = max(
+            1.0,
+            min(190.0, float(timeout or self.settings.timeout_sec)),
+        )
+        events: list[dict[str, Any]] = []
+        cursor = last_event_id
+        completed = False
+        try:
+            with httpx.Client(
+                timeout=httpx.Timeout(stream_timeout, connect=30.0, write=60.0, pool=30.0)
+            ) as client:
+                with client.stream(
+                    "GET",
+                    f"{self.settings.runtime_base.rstrip('/')}/v1/agent/runs/{run_id}/events",
+                    headers=headers,
+                ) as response:
+                    if response.status_code >= 400:
+                        content = response.read()
+                        try:
+                            payload: Any = json.loads(content)
+                        except (json.JSONDecodeError, UnicodeDecodeError):
+                            payload = {"raw": content.decode("utf-8", errors="replace")[:1000]}
+                        raise normalize_remote_error(response.status_code, payload)
+                    for event in _iter_sse_events(response.iter_lines()):
+                        event_type = str(event.get("type") or "message")
+                        if event.get("event_id"):
+                            cursor = str(event["event_id"])
+                        if event_type == "error":
+                            error = event.get("data")
+                            error = error if isinstance(error, dict) else {}
+                            raise CliError(
+                                str(error.get("code") or "remote_error"),
+                                str(error.get("message") or "CinLink Agent event stream failed."),
+                                {"run_id": run_id},
+                            )
+                        events.append(event)
+                        if event_type == "done":
+                            completed = True
+                            break
+        except httpx.HTTPError as exc:
+            raise CliError(
+                "network_error",
+                f"Could not reach CinLink Agent event stream: {exc}",
+                {"run_id": run_id, "last_event_id": cursor},
+            ) from exc
+        return {
+            "run_id": run_id,
+            "events": events,
+            "last_event_id": cursor,
+            "stream_completed": completed,
+        }
+
+    def wait_for_agent_run(
+        self,
+        run_id: str,
+        timeout: float | None = None,
+        *,
+        include_events: bool = False,
+    ) -> dict[str, Any]:
         deadline = time.time() + (timeout or self.settings.timeout_sec)
+        planning_events: list[dict[str, Any]] = []
+        event_stream_error: dict[str, Any] | None = None
+        try:
+            streamed = self.stream_agent_events(
+                run_id,
+                timeout=max(1.0, deadline - time.time()),
+            )
+            planning_events = list(streamed.get("events") or [])
+        except CliError as exc:
+            event_stream_error = exc.to_payload()["error"]
         while True:
             payload = self.get_agent_run(run_id)
             if payload.get("status") in {"done", "failed", "requires_user_input", "waiting_for_local"}:
+                if include_events:
+                    payload["agent_events"] = planning_events
+                    if event_stream_error:
+                        payload["agent_event_stream_error"] = event_stream_error
                 return payload
             if time.time() > deadline:
                 raise CliError("timeout", f"Agent run did not finish within {timeout or self.settings.timeout_sec} seconds.", {"run_id": run_id})
@@ -420,7 +562,7 @@ class RuntimeClient:
         try:
             import httpx
         except ImportError as exc:
-            raise CliError("dependency_missing", "The Python package `httpx` is required to download generated videos.") from exc
+            raise CliError("dependency_missing", "The Python package `httpx` is required to download generated media.") from exc
         timeout = httpx.Timeout(
             max(60.0, float(self.settings.timeout_sec)),
             connect=30.0,
@@ -431,9 +573,9 @@ class RuntimeClient:
             with httpx.Client(timeout=timeout, follow_redirects=True) as client:
                 response = client.get(source_url)
         except httpx.HTTPError as exc:
-            raise CliError("network_error", f"Could not download generated video: {exc}") from exc
+            raise CliError("network_error", f"Could not download generated media: {exc}") from exc
         if response.status_code >= 400:
-            raise CliError("remote_error", f"Generated video download failed with HTTP {response.status_code}.")
+            raise CliError("remote_error", f"Generated media download failed with HTTP {response.status_code}.")
         destination.write_bytes(response.content)
         return destination
 
@@ -442,6 +584,38 @@ class RuntimeClient:
         data = {key: value for key, value in fields.items() if value is not None}
         with checked.open("rb") as file_handle:
             return self._request("POST", path, data=data, files={"file": (checked.name, file_handle)})
+
+    def _upload_reference_images_if_needed(self, values: list[str]) -> list[str]:
+        uploaded: list[str] = []
+        for raw in values:
+            value = str(raw or "").strip()
+            if not value:
+                continue
+            if value.lower().startswith(("http://", "https://")):
+                uploaded.append(value)
+                continue
+            if value.lower().startswith("file://"):
+                from urllib.parse import unquote, urlparse
+
+                image_path = Path(unquote(urlparse(value).path))
+            else:
+                image_path = Path(value)
+            checked = require_existing_file(image_path)
+            with checked.open("rb") as handle:
+                payload = self._request(
+                    "POST",
+                    "/v1/reference-images",
+                    files={"file": (checked.name, handle)},
+                )
+            reference_url = str(payload.get("reference_image_url") or "").strip()
+            if not reference_url:
+                raise CliError(
+                    "invalid_response",
+                    "CinLink reference image upload did not return reference_image_url.",
+                    {"path": str(checked)},
+                )
+            uploaded.append(reference_url)
+        return uploaded
 
     def _multipart_audio_or_file(
         self,
@@ -600,17 +774,86 @@ def _compact(payload: dict[str, Any]) -> dict[str, Any]:
 def _context_file_payload(path: Path) -> dict[str, Any]:
     checked = require_existing_file(path)
     kind = "subtitle" if checked.suffix.lower() == ".txt" else infer_artifact_kind(checked)
+    metadata = {
+        "file_size_bytes": str(checked.stat().st_size),
+        "artifact_original_name": checked.name,
+    }
+    if kind == "subtitle" and _subtitle_file_has_usable_cues(checked):
+        metadata.update(
+            {
+                "subtitle_has_usable_cues": "true",
+                "subtitle_reuse_eligible": "true",
+            }
+        )
     return {
         "id": None,
         "name": checked.name,
         "kind": kind,
         "local_path": str(checked),
         "local_hint": str(checked),
-        "metadata": {
-            "file_size_bytes": str(checked.stat().st_size),
-            "artifact_original_name": checked.name,
-        },
+        "metadata": metadata,
     }
+
+
+def _subtitle_file_has_usable_cues(path: Path) -> bool:
+    suffix = path.suffix.lower()
+    if suffix not in {".srt", ".vtt", ".ass", ".ssa"}:
+        return False
+    try:
+        content = path.read_text(encoding="utf-8", errors="replace")[:200_000]
+    except OSError:
+        return False
+    if suffix in {".ass", ".ssa"}:
+        return any(line.lstrip().startswith("Dialogue:") for line in content.splitlines())
+    return "-->" in content
+
+
+def _annotate_context_relationships(
+    context_files: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    videos = [item for item in context_files if item.get("kind") == "video"]
+    annotated: list[dict[str, Any]] = []
+    for item in context_files:
+        if item.get("kind") != "subtitle":
+            annotated.append(item)
+            continue
+        metadata = dict(item.get("metadata") or {})
+        has_source = any(
+            str(metadata.get(key) or "").strip()
+            for key in (
+                "subtitle_source_video_id",
+                "subtitle_source_video_entity_id",
+                "subtitle_source_video_name",
+            )
+        )
+        if not has_source:
+            source = _unique_context_video_for_subtitle(item, videos)
+            if source is not None:
+                if source.get("id"):
+                    metadata["subtitle_source_video_id"] = str(source["id"])
+                elif source.get("entity_id"):
+                    metadata["subtitle_source_video_entity_id"] = str(
+                        source["entity_id"]
+                    )
+                else:
+                    metadata["subtitle_source_video_name"] = str(source.get("name") or "")
+        annotated.append({**item, "metadata": metadata})
+    return annotated
+
+
+def _unique_context_video_for_subtitle(
+    subtitle: dict[str, Any],
+    videos: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    if len(videos) == 1:
+        return videos[0]
+    subtitle_stem = Path(str(subtitle.get("name") or "")).stem.lower()
+    stem_matches = [
+        video
+        for video in videos
+        if Path(str(video.get("name") or "")).stem.lower() == subtitle_stem
+    ]
+    return stem_matches[0] if len(stem_matches) == 1 else None
 
 
 def _context_descriptor_payload(value: dict[str, Any]) -> dict[str, Any]:
@@ -713,6 +956,171 @@ def _privacy_input_kind(path: Path) -> str:
     if kind in {"subtitle", "document"}:
         return "subtitles_or_text"
     return kind
+
+
+_FINAL_ARTIFACT_ROLES = {
+    "burned_video",
+    "dubbed_video",
+    "edited_video",
+    "enhanced_video",
+    "final",
+    "final_image",
+    "final_output",
+    "final_video",
+    "generated_image",
+    "generated_video",
+    "highlight_video",
+    "primary",
+    "shortened_video",
+    "subtitled_video",
+}
+_SUPPORTING_ARTIFACT_ROLES = {"captions", "supporting", "translated_subtitle"}
+_INTERNAL_ARTIFACT_ROLES = {
+    "dubbed_audio",
+    "intermediate",
+    "reference_subtitle",
+    "source_audio",
+    "source_subtitle",
+    "transcript",
+}
+
+
+def _iter_sse_events(lines: Any):
+    event_type = "message"
+    event_id: str | None = None
+    data_lines: list[str] = []
+
+    def consume() -> dict[str, Any] | None:
+        nonlocal event_type, event_id, data_lines
+        if not data_lines and event_id is None and event_type == "message":
+            return None
+        raw_data = "\n".join(data_lines)
+        try:
+            payload: Any = json.loads(raw_data) if raw_data else {}
+        except json.JSONDecodeError:
+            payload = {"text": raw_data}
+        event: dict[str, Any] = {
+            "type": event_type,
+            "event_id": event_id,
+            "data": payload,
+        }
+        if isinstance(payload, dict):
+            event.update(payload)
+            event["type"] = event_type
+            event["event_id"] = event_id or payload.get("event_id")
+            event["data"] = payload
+        event_type = "message"
+        event_id = None
+        data_lines = []
+        return event
+
+    for raw_line in lines:
+        line = raw_line.decode("utf-8", errors="replace") if isinstance(raw_line, bytes) else str(raw_line)
+        if line == "":
+            event = consume()
+            if event is not None:
+                yield event
+            continue
+        if line.startswith(":"):
+            continue
+        field, separator, value = line.partition(":")
+        if not separator:
+            value = ""
+        elif value.startswith(" "):
+            value = value[1:]
+        if field == "event":
+            event_type = value or "message"
+        elif field == "id":
+            event_id = value or None
+        elif field == "data":
+            data_lines.append(value)
+    event = consume()
+    if event is not None:
+        yield event
+
+
+def _with_agent_delivery(payload: dict[str, Any]) -> dict[str, Any]:
+    result = dict(payload)
+    artifact_values = payload.get("artifacts")
+    artifacts = [item for item in artifact_values if isinstance(item, dict)] if isinstance(artifact_values, list) else []
+    completion = payload.get("completion")
+    completion = completion if isinstance(completion, dict) else {}
+    primary_ids = {str(value) for value in completion.get("primary_artifact_ids") or [] if value}
+    supporting_ids = {str(value) for value in completion.get("supporting_artifact_ids") or [] if value}
+
+    def role(artifact: dict[str, Any], key: str) -> str:
+        metadata = artifact.get("metadata")
+        metadata = metadata if isinstance(metadata, dict) else {}
+        return str(metadata.get(key) or "").strip().lower()
+
+    primary_indexes = {
+        index
+        for index, artifact in enumerate(artifacts)
+        if str(artifact.get("id") or "") in primary_ids
+    }
+    if not primary_indexes:
+        primary_indexes = {
+            index
+            for index, artifact in enumerate(artifacts)
+            if role(artifact, "delivery_role") == "primary"
+            or role(artifact, "artifact_role") in _FINAL_ARTIFACT_ROLES
+        }
+    if not primary_indexes:
+        completed_node_ids = {
+            str(step.get("node_id"))
+            for step in payload.get("plan") or []
+            if isinstance(step, dict) and step.get("node_id") and step.get("status") == "done"
+        }
+        dependency_ids = {
+            str(dependency)
+            for step in payload.get("plan") or []
+            if isinstance(step, dict)
+            for dependency in step.get("depends_on") or []
+        }
+        terminal_ids = completed_node_ids - dependency_ids
+        primary_indexes = {
+            index
+            for index, artifact in enumerate(artifacts)
+            if role(artifact, "artifact_role") not in _INTERNAL_ARTIFACT_ROLES
+            and role(artifact, "plan_node_id") in terminal_ids
+        }
+    if not primary_indexes:
+        deliverable = [
+            index
+            for index, artifact in enumerate(artifacts)
+            if str(artifact.get("kind") or "").lower()
+            in {"video", "image", "document", "summary", "subtitle", "translation"}
+            and role(artifact, "artifact_role") not in _INTERNAL_ARTIFACT_ROLES
+        ]
+        if deliverable:
+            primary_indexes = {deliverable[-1]}
+        elif artifacts:
+            primary_indexes = {len(artifacts) - 1}
+
+    supporting_indexes = {
+        index
+        for index, artifact in enumerate(artifacts)
+        if index not in primary_indexes
+        and (
+            str(artifact.get("id") or "") in supporting_ids
+            or role(artifact, "delivery_role") == "supporting"
+            or role(artifact, "artifact_role") in _SUPPORTING_ARTIFACT_ROLES
+        )
+    }
+    result["primary_artifacts"] = [
+        artifact for index, artifact in enumerate(artifacts) if index in primary_indexes
+    ]
+    result["supporting_artifacts"] = [
+        artifact for index, artifact in enumerate(artifacts) if index in supporting_indexes
+    ]
+    result["intermediate_artifacts"] = [
+        artifact
+        for index, artifact in enumerate(artifacts)
+        if index not in primary_indexes and index not in supporting_indexes
+    ]
+    result["completion_message"] = str(completion.get("message") or "").strip() or None
+    result["completion_title"] = str(completion.get("title") or "").strip() or None
+    return result
 
 
 def _with_agent_privacy_receipt(payload: dict[str, Any]) -> dict[str, Any]:

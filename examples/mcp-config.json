@@ -4,7 +4,7 @@
       "command": "cinlink-mcp",
       "args": [],
       "env": {
-        "CINLINK_API_KEY": "ck_live_or_test_xxx"
+        "CINLINK_API_KEY": "as_live_xxx"
       }
     }
   }

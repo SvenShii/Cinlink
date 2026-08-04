@@ -4,7 +4,7 @@ Standalone CinLink skills and CLI for agents. This project is intentionally sepa
 
 Product policy:
 
-- Hosted-first for transcription, translation, dubbing, summarization, image generation, and video generation.
+- Hosted-first for transcription, translation, dubbing, summarization, video deconstruction/regeneration, image generation, and video generation.
 - Local dependencies are used only for local capabilities.
 - The hosted server does not provide Demucs voice-separation runtime.
 - If the user asks for voice separation, vocal removal, or preserving background music through local separation, the user must install local `ffmpeg`, `demucs`, and `soundfile`.
@@ -39,13 +39,15 @@ During install, the agent should also run:
 cinlink setup-local-deps
 ```
 
-This prompts the user to install local `ffmpeg`/`ffprobe` for subtitle burn-in, local audio extraction/mixing, Clean Cut, trimming, montage, watermarking, and local media inspection. It also offers optional `demucs` and `soundfile` for local voice separation/background preservation.
+This prompts the user to install local `ffmpeg`/`ffprobe` for subtitle burn-in, local audio extraction/mixing, Clean Cut, trimming, montage, watermarking, video deconstruction/assembly, media export, editor project handoff, and local media inspection. It also offers optional `demucs` and `soundfile` for local voice separation/background preservation.
 
 Try prompts like:
 
 > Using `/cinlink`, add subtitles to this video.
 
 > Using `/cinlink`, dub this video into English and summarize the result.
+
+> Using `/cinlink`, deconstruct this video, replace the product, and regenerate it.
 
 The skills follow the Hyperframes-style package layout: a router skill plus focused domain skills. Hosted work uses your CinLink API key; local-only work uses local dependencies such as `ffmpeg`.
 
@@ -83,7 +85,7 @@ The installer:
 If you pass an API key, the installer uses it without prompting:
 
 ```powershell
-powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -ApiKey "ck_live_or_test_xxx"
+powershell -ExecutionPolicy Bypass -File .\scripts\install_windows.ps1 -ApiKey "as_live_xxx"
 ```
 
 To accept local dependency installation without an interactive prompt, pass `-InstallLocalDependencies`. To also install optional local voice-separation dependencies, pass `-InstallVoiceSeparationDependencies`.
@@ -100,7 +102,7 @@ If `cinlink` is not found after manual install, use the installer above or add P
 ## Configure
 
 ```powershell
-cinlink --json onboarding --api-key ck_live_or_test_xxx
+cinlink --json onboarding --api-key as_live_xxx
 cinlink setup-local-deps
 cinlink --json doctor
 ```
@@ -108,7 +110,7 @@ cinlink --json doctor
 Environment variables can also be used:
 
 ```powershell
-$env:CINLINK_API_KEY="ck_live_or_test_xxx"
+$env:CINLINK_API_KEY="as_live_xxx"
 $env:CINLINK_RUNTIME_BASE="https://runtime.cinlink.ai"
 $env:CINLINK_BILLING_BASE="https://app.cinlink.ai"
 ```
@@ -134,16 +136,23 @@ cinlink --json apply-watermark "D:\videos\demo.mp4"
 cinlink --json mix-dubbed-audio "D:\videos\demo.mp4" --dubbed-audio "D:\videos\dubbed.wav"
 cinlink --json summarize "D:\videos\demo.mp4"
 cinlink --json shorten "D:\videos\demo.mp4" --target-duration 45
-cinlink --json image "a clean product poster"
+cinlink --json image "a clean product poster" --reference-image-url "D:\brand\product.png"
 cinlink --json video "a 5 second cinematic product reveal"
+cinlink --json video "animate this product" --first-frame-image-url "D:\brand\product.png"
+cinlink --json deconstruct-video "D:\videos\demo.mp4" --language en --analysis-scope "camera, product, lighting" --out "D:\videos\deconstruction"
+cinlink --json regenerate-deconstruction "D:\videos\deconstruction\deconstruction.json" --replacement-reference "product=D:\brand\new-product.png"
+cinlink --json export-video "D:\videos\demo.mp4" --format mov
+cinlink --json export-audio "D:\videos\demo.mp4" --format mp3
+cinlink --json export-editor-project "D:\videos\demo.mp4" --target premiere --subtitle "D:\videos\demo.srt"
 
 cinlink --json agent run "Summarize this video into five selling points" --context-file "D:\videos\demo.mp4" --app-language en
-cinlink --json agent run "Add English subtitles and return the subtitled video" --context-file "D:\videos\demo.mp4" --client-request-id request_123 --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait
+cinlink --json agent run "Add English subtitles and return the subtitled video" --context-file "D:\videos\demo.mp4" --client-request-id request_123 --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait --include-events
 cinlink --json agent poll run_xxx
+cinlink --json agent events run_xxx
 cinlink --json agent local-tools run_xxx
 ```
 
-The current hosted runtime keeps full user videos off the server for transcription, media translation, summarization, shortening, and dubbing. When those commands receive a local video, the CLI extracts audio with local `ffmpeg` and uploads only the audio. `cinlink dub` also supports repeated `--reference-audio speaker_id=path` values for speaker-specific voice references.
+The current hosted runtime keeps full user videos off the server for transcription, media translation, summarization, shortening, dubbing, and visual deconstruction. Audio workflows upload only locally extracted audio; deconstruction uploads only sampled frames. Image generation accepts up to three local/remote references; video generation accepts up to nine image references. Local images are uploaded through the authenticated reference-image endpoint. `cinlink dub` also supports repeated `--reference-audio speaker_id=path` values for speaker-specific voice references.
 
 ## Stable JSON Contract
 
@@ -188,7 +197,7 @@ Example MCP config:
       "command": "cinlink-mcp",
       "args": [],
       "env": {
-        "CINLINK_API_KEY": "ck_live_or_test_xxx"
+        "CINLINK_API_KEY": "as_live_xxx"
       }
     }
   }
@@ -212,9 +221,10 @@ The `skills/` directory contains installable skills for agent systems that prefe
 | `/cinlink-cli` | Install/configure CLI, store API key, run doctor, inspect tool schemas, use JSON bridge. |
 | `/cinlink-subtitles` | Transcribe, translate subtitles/media, produce bilingual subtitles, burn styled subtitles/watermarks. |
 | `/cinlink-dubbing` | Voice translation, dubbing, dubbed audio generation, local dubbed-audio mixing. |
-| `/cinlink-editing` | Clean Cut, exact clips, ordered montage, local watermarks, persistent Brand Kit. |
+| `/cinlink-editing` | Clean Cut, exact clips, montage, local watermarks/Brand Kit, video/audio/editor exports. |
 | `/cinlink-understanding` | Summarize videos, extract highlights, shorten long videos into plans, NLU routing. |
-| `/cinlink-generation` | Generate AI images and AI videos with hosted providers and remote references. |
+| `/cinlink-generation` | Generate AI images and AI videos with hosted providers and local/remote references. |
+| `/cinlink-deconstruction` | Deconstruct local videos, edit shot plans, replace visual references, regenerate with continuity. |
 | `/cinlink-agent` | Multi-step natural-language media workflows through the hosted CinLink agent runtime. |
 
 ### Compatibility wrappers
@@ -226,9 +236,9 @@ The `skills/` directory contains installable skills for agent systems that prefe
 Hosted capabilities require a CinLink API key, configured with:
 
 ```powershell
-cinlink --json onboarding --api-key ck_live_or_test_xxx
+cinlink --json onboarding --api-key as_live_xxx
 ```
 
 For agent installs, prefer the install-time flow in `install.md`: collect the key once, run `cinlink --json onboarding --api-key <key>`, then use `cinlink --json doctor` to confirm `has_api_key: true`.
 
-Local-only capabilities such as subtitle burn-in, Clean Cut, trimming, montage, watermarking, and dubbed-audio mixing require local `ffmpeg`/`ffprobe`. Voice separation or background-music preservation through separated stems also requires local `demucs` and `soundfile`; agents should ask the user before installing local dependencies.
+Local-only capabilities such as subtitle burn-in, Clean Cut, trimming, montage, watermarking, dubbed-audio mixing, video/audio export, editor project handoff, and deconstruction/regeneration assembly require local `ffmpeg`/`ffprobe`. Voice separation or background-music preservation through separated stems also requires local `demucs` and `soundfile`; agents should ask the user before installing local dependencies.

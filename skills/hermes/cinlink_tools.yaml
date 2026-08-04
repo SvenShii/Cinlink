@@ -32,6 +32,13 @@ tools:
       task_parameters: object
       conversation_state: object
       wait: boolean
+      include_events: boolean
+      timeout: number
+  - name: cinlink_agent_events
+    command: cinlink --json agent events "{run_id}"
+    args_schema:
+      run_id: string
+      last_event_id: string
       timeout: number
   - name: cinlink_transcribe
     command: cinlink --json transcribe "{input_path}"
@@ -175,7 +182,9 @@ tools:
       prompt: string
       aspect_ratio: string
       image_size: string
+      reference_image_urls: string[]
       model: string
+      timeout: number
       out: string
   - name: cinlink_video
     command: cinlink --json video "{prompt}"
@@ -194,6 +203,49 @@ tools:
       model: string
       model_name: string
       model_version: string
+      out: string
+  - name: cinlink_deconstruct_video
+    command: cinlink --json deconstruct-video "{video_path}"
+    args_schema:
+      video_path: string
+      replacement_references: object[]
+      language: string
+      analysis_scope: string
+      scene_threshold: number
+      max_shots: integer
+      out: string
+  - name: cinlink_regenerate_deconstruction
+    command: cinlink --json regenerate-deconstruction "{plan_path}"
+    args_schema:
+      plan_path: string
+      replacement_references: object[]
+      resolution: string
+      preserve_original_audio: boolean
+      model: string
+      model_name: string
+      model_version: string
+      timeout: number
+      out: string
+  - name: cinlink_export_video
+    command: cinlink --json export-video "{video_path}"
+    args_schema:
+      video_path: string
+      output_format: string
+      out: string
+  - name: cinlink_export_audio
+    command: cinlink --json export-audio "{video_path}"
+    args_schema:
+      video_path: string
+      audio_path: string
+      output_format: string
+      out: string
+  - name: cinlink_export_editor_project
+    command: cinlink --json export-editor-project "{video_path}" --target "{target}"
+    args_schema:
+      video_path: string
+      target: string
+      subtitle_path: string
+      audio_path: string
       out: string
   - name: cinlink_nlu
     command: cinlink --json nlu "{prompt}"

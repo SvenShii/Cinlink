@@ -3,7 +3,7 @@
   "name": "cinlink",
   "displayName": "CinLink",
   "version": "0.1.0",
-  "description": "CinLink media tools for agents: subtitles, translation, dubbing, video understanding, AI image/video generation, and hosted media workflows.",
+  "description": "CinLink media tools for agents: subtitles, dubbing, video understanding/deconstruction, local media/editor export, AI generation, and hosted workflows.",
   "author": {
     "name": "CinLink"
   },
@@ -19,9 +19,11 @@
     "subtitles",
     "translation",
     "dubbing",
+    "deconstruction",
+    "media-export",
     "ai-video",
     "agent"
   ],
-  "tags": ["video", "subtitles", "dubbing", "generation", "workflow"],
+  "tags": ["video", "subtitles", "dubbing", "deconstruction", "export", "generation", "workflow"],
   "skills": "./skills/"
 }
