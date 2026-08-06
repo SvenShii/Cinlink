@@ -152,7 +152,7 @@ cinlink --json agent run "给这个视频加英文字幕，并输出带字幕视
 cinlink --json agent clarify run_xxx --clarification-id translation_mode:0 --value voice --wait
 ```
 
-文本澄清使用 `--answer`。只有一个澄清时可以省略 `--clarification-id`。该命令会保留原会话、任务框架、上下文文件和复合执行计划；没有 `clarifications` 的安装/授权确认不要调用它。
+文本澄清使用 `--answer`。只有一个澄清时可以省略 `--clarification-id`，多个澄清逐个回答。自由表述的视频翻译会先确认 `translation_mode=subtitle|voice`；选择字幕后，还可能继续确认 `output_delivery=subtitle_file|burned_video`。必须展示第二个问题，不能直接采用默认值。检查 `workflow_decision.slot_provenance`，来源为 `model_default` 或 `unknown` 的执行敏感字段不算用户已确认。该命令会保留原会话、任务框架、上下文文件和复合执行计划；没有 `clarifications` 的安装/授权确认不要调用它。
 
 等待任务时可用 `--include-events` 收集公开的规划/推理进度，也可以单独读取 SSE：
 
@@ -221,9 +221,9 @@ cinlink --json export-audio \"D:\\videos\\demo.mp4\" --format mp3
 cinlink --json export-editor-project \"D:\\videos\\demo.mp4\" --target premiere --subtitle \"D:\\videos\\demo.srt\"
 ```
 
-新版 hosted runtime 在转写、视频翻译、总结、短视频规划、配音和视觉拆解流程中都不接收完整视频。音频工作流只上传本地抽取的音频；视频拆解只上传采样帧。图片生成最多接收 3 张参考图，视频生成最多接收 9 张参考图；URL 或本地路径均可，本地图片会经鉴权的参考图接口上传。配音应携带与译文逐条对齐的原文参考字幕；未显式传入时 CLI 会依次寻找同目录下的 `source.reference.srt`、`subtitle.reference.srt`、`source.srt`。多说话人配音参考音频用重复的 `--reference-audio speaker_id=path`。
+新版 hosted runtime 在转写、视频翻译、总结、短视频规划、配音和视觉拆解流程中都不接收完整视频。音频工作流只上传本地抽取的音频；缩短流程会先把音频注册为账号范围内的 Agent 文件，再用 `cloud_file_id` 提交分析，旧 runtime 不支持时自动退回 multipart 音频上传。视频拆解只上传采样帧。图片生成最多接收 3 张参考图，视频生成最多接收 9 张参考图；URL 或本地路径均可，本地图片会经鉴权的参考图接口上传。配音应携带与译文逐条对齐的原文参考字幕；未显式传入时 CLI 会依次寻找同目录下的 `source.reference.srt`、`subtitle.reference.srt`、`source.srt`。多说话人配音参考音频用重复的 `--reference-audio speaker_id=path`。
 
-Agent 同时收到一个视频和一份有效的 SRT/VTT/ASS 时，CLI 会把字幕标记为可复用并绑定来源视频，避免重复转写。有多份字幕或图片时，应通过 `--context-json` 保留 id、语言、artifact role、来源 lineage、`cloud_file_id` 和 `public_url`。如果任务同时要求缩短和配音，要先在原始完整时间轴上完成配音合成，再剪高光，不能把完整配音音轨直接混入已经缩短的视频。
+Agent 同时收到一个视频和一份有效的 SRT/VTT/ASS 时，CLI 会把字幕标记为可复用并绑定来源视频，避免重复转写。通过 `--context-file` 本次提交的本地文件会自动标记 `selection_scope=current_submission` 和 `input_priority=highest`，优先于会话里的旧文件；本次同时提交多个同类文件时仍会保留歧义。有多份字幕或图片时，应通过 `--context-json` 保留 id、语言、artifact role、来源 lineage、`cloud_file_id` 和 `public_url`；当前明确选中的 descriptor 才手动加上述两个 metadata，历史 descriptor 不自动提权。显式选中的生成参考图无法解析时，应要求重新提供，不能静默替换成旧图片。如果任务同时要求缩短和配音，要先在原始完整时间轴上完成配音合成，再剪高光，不能把完整配音音轨直接混入已经缩短的视频。
 
 Agent 完成时优先把 `completion_message` 给用户，并把 `primary_artifacts` 作为最终结果；`supporting_artifacts` 只在有帮助时补充，`intermediate_artifacts` 不作为最终交付。
 

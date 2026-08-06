@@ -328,7 +328,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "output_schema": {"type": "object"},
     },
     "shorten": {
-        "description": "Create a highlight plan for a long local video. The CLI keeps the video local, uploads extracted audio for hosted analysis, and returns the original source_video_path for local rendering.",
+        "description": "Create a highlight plan for a long local video. The CLI keeps the video local, uploads extracted audio through the account-scoped Agent file endpoint, reuses its cloud_file_id for hosted analysis when supported, falls back to compatibility multipart upload, and returns source_video_path for local rendering.",
         "input_schema": {
             "type": "object",
             "required": ["video_path"],
@@ -600,7 +600,11 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "properties": {
                 "prompt": {"type": "string"},
                 "conversation_id": {"type": "string"},
-                "context_file": {"type": "array", "items": {"type": "string"}},
+                "context_file": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Local files explicitly submitted with this run. The CLI marks them selection_scope=current_submission and input_priority=highest so they outrank stale conversation context without hiding ambiguity among multiple current files.",
+                },
                 "context_descriptors": {
                     "type": "array",
                     "items": {
@@ -617,7 +621,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                             "metadata": {"type": "object", "additionalProperties": True},
                         },
                     },
-                    "description": "Rich context artifacts for follow-up workflows. Preserve cloud_file_id, public_url, artifact_role, and producer_step from earlier results.",
+                    "description": "Rich context artifacts for follow-up workflows. Preserve cloud_file_id, public_url, artifact_role, and producer_step from earlier results. For an artifact explicitly selected in the current request, set metadata.selection_scope=current_submission and metadata.input_priority=highest; historical descriptors are not elevated automatically.",
                 },
                 "client_request_id": {
                     "type": "string",
@@ -639,7 +643,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "task_parameters": {
                     "type": "object",
                     "additionalProperties": {"type": "string"},
-                    "description": "Explicit app slot values such as output_delivery=burned_video, target_language=en, source_language=auto, subtitle_language=en, translation_mode=subtitle, analysis_scope=camera, or target_duration_sec=30.",
+                    "description": "Explicit app slot values such as target_language=en, translation_mode=subtitle|voice, output_delivery=subtitle_file|burned_video, source_language=auto, subtitle_language=en, analysis_scope=camera, or target_duration_sec=30. Free-form translation should resolve translation_mode first, then output_delivery for subtitle mode; do not silently choose either from a model default.",
                 },
                 "conversation_state": {
                     "type": "object",
@@ -665,14 +669,41 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "intermediate_artifacts": {"type": "array"},
                 "clarifications": {
                     "type": "array",
-                    "description": "Structured questions returned when status is requires_user_input. Present these to the user and continue with agent_clarify.",
+                    "description": "Structured questions returned when status is requires_user_input. Present these to the user and continue with agent_clarify. Subtitle translation can require translation_mode followed by output_delivery.",
+                },
+                "workflow_decision": {
+                    "type": "object",
+                    "description": "Structured route decision. Inspect slot_provenance before execution-sensitive choices; model_default and unknown do not count as user-resolved translation_mode or output_delivery.",
+                    "properties": {
+                        "slot_provenance": {
+                            "type": "array",
+                            "items": {
+                                "type": "object",
+                                "properties": {
+                                    "slot": {"type": "string"},
+                                    "source": {
+                                        "type": "string",
+                                        "enum": [
+                                            "user_explicit",
+                                            "structured_parameter",
+                                            "resolved_clarification",
+                                            "conversation_context",
+                                            "model_default",
+                                            "unknown",
+                                        ],
+                                    },
+                                    "evidence": {"type": ["string", "null"]},
+                                },
+                            },
+                        }
+                    },
                 },
                 "agent_events": {"type": "array"},
             },
         },
     },
     "agent_clarify": {
-        "description": "Answer one structured clarification from a CinLink Agent run and continue the same task. The tool preserves the prior task frame, conversation, context artifacts, language, and selected slot value.",
+        "description": "Answer one structured clarification from a CinLink Agent run and continue the same task. The tool preserves the prior task frame, conversation, context artifacts, language, and selected slot value. A subtitle translation answer may return a second output_delivery clarification before execution.",
         "input_schema": {
             "type": "object",
             "required": ["run_id"],

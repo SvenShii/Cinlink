@@ -29,6 +29,8 @@ Always pass `--app-language` when the caller knows the user's UI/conversation la
 
 If the current prompt names a target language, that current language wins over recent messages, saved conversation state, or historical defaults. For "add subtitles" requests, default `output_delivery` to `burned_video` unless the user explicitly asks for only an SRT/subtitle/transcript file.
 
+For free-form media translation, do not infer whether the user wants subtitles or dubbing, and do not infer subtitle-file versus burned-video delivery. Resolve `translation_mode=subtitle|voice` first. If subtitle mode is selected, resolve `output_delivery=subtitle_file|burned_video` next. Inspect `workflow_decision.slot_provenance`; `model_default` and `unknown` are not user-resolved choices.
+
 Use `--client-request-id <id>` when the caller has a stable idempotency/correlation id. Use `--hidden-context` or `--hidden-context-file` only for invisible client UI state such as selected settings; never put secrets there, and do not copy hidden context into provider prompts or user-visible text.
 
 For follow-up tasks, preserve rich artifact context from earlier output:
@@ -37,9 +39,11 @@ For follow-up tasks, preserve rich artifact context from earlier output:
 cinlink --json agent run "Use this generated image as the video reference." --app-language en --context-json '{"name":"generated.png","kind":"image","public_url":"https://...","cloud_file_id":"...","metadata":{"artifact_role":"generated_image","producer_step":"generate_image"}}' --task-intent generate_video --wait
 ```
 
-Use `--context-file` for a plain local path. Use repeated `--context-json` when identity or lineage fields such as `id`, `entity_id`, `local_asset_id`, `cloud_file_id`, `public_url`, `artifact_role`, or `producer_step` are available.
+Use `--context-file` for a plain local path. The CLI marks these files `selection_scope=current_submission` and `input_priority=highest`, so a single newly submitted file outranks stale conversation files. Use repeated `--context-json` when identity or lineage fields such as `id`, `entity_id`, `local_asset_id`, `cloud_file_id`, `public_url`, `artifact_role`, or `producer_step` are available. For an explicitly selected descriptor, set those two metadata fields yourself; historical descriptors are not elevated automatically.
 
 When one video and a valid timed SRT/VTT/ASS are passed as local context files, the CLI marks the subtitle reusable and binds it to that video. For multiple subtitles or generated artifacts, use `--context-json` with explicit source lineage and language metadata so the runtime can select the exact target-language subtitle rather than retranscribing or translating it again.
+
+For image/video generation, an explicitly bound reference must resolve to that exact authorized artifact. If its public URL or cloud identity is unavailable, ask for the selected image again; never substitute another image from conversation history.
 
 The CLI checks a bound local subtitle timeline against the local video's duration when `ffprobe` is available. If cue starts or ends exceed the app's grace window, it marks `subtitle_reuse_eligible=false`; do not force reuse or bypass that mismatch.
 
@@ -59,7 +63,7 @@ After the user chooses an option, continue the same task with its value or label
 cinlink --json agent clarify <run_id> --clarification-id <id> --value voice --wait --include-events
 ```
 
-For `input_kind=text`, pass `--answer "<user answer>"`. When exactly one clarification exists, `--clarification-id` may be omitted. Answer multiple clarifications one at a time. `agent clarify` preserves the prior task frame, conversation, context files, language, and compound execution plan; do not rebuild these fields manually.
+For `input_kind=text`, pass `--answer "<user answer>"`. When exactly one clarification exists, `--clarification-id` may be omitted. Answer multiple clarifications one at a time. Selecting subtitle translation can return a second `output_delivery` clarification; present it instead of assuming the default. `agent clarify` preserves the prior task frame, conversation, context files, language, and compound execution plan; do not rebuild these fields manually.
 
 Some install or capability approvals use `requires_user_input` without a structured `clarifications` array. Ask for the requested authorization and follow the local install/tool flow instead of calling `agent clarify`.
 

@@ -49,26 +49,86 @@ class RuntimeClientMediaUploadTests(unittest.TestCase):
 
     def test_summarize_and_shorten_keep_video_local(self) -> None:
         uploaded: list[tuple[str, str, bool]] = []
+        requests: list[tuple[str, dict]] = []
 
         def fake_multipart(path: str, input_path: Path, _fields: dict) -> dict:
             uploaded.append((path, input_path.suffix, input_path.exists()))
             return {"status": "done"}
 
+        def fake_request(_method: str, path: str, **kwargs: object) -> dict:
+            requests.append((path, kwargs))
+            if path == "/v1/agent/files":
+                return {"cloud_file_id": "cloud-audio-1"}
+            return {"status": "done"}
+
         with patch("popularvideo_cli.client._extract_audio_for_upload", side_effect=self._fake_extract), patch.object(
             self.client, "_multipart", side_effect=fake_multipart
+        ), patch.object(
+            self.client, "_request", side_effect=fake_request
         ):
             summary = self.client.summarize(self.video)
             short_plan = self.client.shorten(self.video)
 
+        self.assertEqual(uploaded, [("/v1/summarize", ".m4a", True)])
         self.assertEqual(
-            uploaded,
-            [
-                ("/v1/summarize", ".m4a", True),
-                ("/v1/shorten", ".m4a", True),
-            ],
+            [path for path, _ in requests],
+            ["/v1/agent/files", "/v1/shorten"],
+        )
+        self.assertEqual(
+            requests[-1][1]["files"],
+            {"cloud_file_id": (None, "cloud-audio-1")},
         )
         self.assertEqual(summary["source_video_path"], str(self.video.resolve()))
         self.assertEqual(short_plan["source_video_path"], str(self.video.resolve()))
+
+    def test_shorten_falls_back_when_cloud_audio_references_are_unsupported(self) -> None:
+        uploaded: list[tuple[str, str, bool]] = []
+
+        def fake_multipart(path: str, input_path: Path, _fields: dict) -> dict:
+            uploaded.append((path, input_path.suffix, input_path.exists()))
+            return {"status": "done"}
+
+        with patch(
+            "popularvideo_cli.client._extract_audio_for_upload",
+            side_effect=self._fake_extract,
+        ), patch.object(
+            self.client,
+            "_upload_agent_file",
+            side_effect=CliError(
+                "job_not_found",
+                "The requested remote resource was not found.",
+                {"status_code": 404},
+            ),
+        ), patch.object(self.client, "_multipart", side_effect=fake_multipart):
+            result = self.client.shorten(self.video)
+
+        self.assertEqual(uploaded, [("/v1/shorten", ".m4a", True)])
+        self.assertEqual(result["source_video_path"], str(self.video.resolve()))
+
+    def test_shorten_falls_back_when_runtime_rejects_cloud_file_field(self) -> None:
+        uploaded: list[tuple[str, str, bool]] = []
+
+        def fake_request(_method: str, path: str, **_kwargs: object) -> dict:
+            if path == "/v1/agent/files":
+                return {"cloud_file_id": "cloud-audio-1"}
+            raise CliError("invalid_input", "Missing upload file for shorten request.")
+
+        def fake_multipart(path: str, input_path: Path, _fields: dict) -> dict:
+            uploaded.append((path, input_path.suffix, input_path.exists()))
+            return {"status": "done"}
+
+        with patch(
+            "popularvideo_cli.client._extract_audio_for_upload",
+            side_effect=self._fake_extract,
+        ), patch.object(
+            self.client, "_request", side_effect=fake_request
+        ), patch.object(
+            self.client, "_multipart", side_effect=fake_multipart
+        ):
+            result = self.client.shorten(self.video)
+
+        self.assertEqual(uploaded, [("/v1/shorten", ".m4a", True)])
+        self.assertEqual(result["source_video_path"], str(self.video.resolve()))
 
     def test_dub_video_uploads_audio_and_speaker_references(self) -> None:
         submitted: dict = {}
@@ -212,13 +272,39 @@ class RuntimeClientMediaUploadTests(unittest.TestCase):
             )
 
         context = request.call_args.kwargs["json_body"]["context_files"]
+        video = next(item for item in context if item["kind"] == "video")
         subtitle = next(item for item in context if item["kind"] == "subtitle")
+        self.assertEqual(video["metadata"]["selection_scope"], "current_submission")
+        self.assertEqual(video["metadata"]["input_priority"], "highest")
+        self.assertEqual(subtitle["metadata"]["selection_scope"], "current_submission")
+        self.assertEqual(subtitle["metadata"]["input_priority"], "highest")
         self.assertEqual(subtitle["metadata"]["subtitle_has_usable_cues"], "true")
         self.assertEqual(subtitle["metadata"]["subtitle_reuse_eligible"], "true")
         self.assertEqual(
             subtitle["metadata"]["subtitle_source_video_name"],
             self.video.name,
         )
+
+    def test_agent_context_descriptor_is_not_implicitly_current_submission(self) -> None:
+        with patch.object(
+            self.client, "_request", return_value={"run_id": "run-1"}
+        ) as request:
+            self.client.create_agent_run(
+                "Continue with the previous artifact",
+                context_descriptors=[
+                    {
+                        "id": "historical-video",
+                        "name": "historical.mp4",
+                        "kind": "video",
+                        "metadata": {"artifact_role": "source_video"},
+                    }
+                ],
+            )
+
+        descriptor = request.call_args.kwargs["json_body"]["context_files"][0]
+        self.assertEqual(descriptor["metadata"]["artifact_role"], "source_video")
+        self.assertNotIn("selection_scope", descriptor["metadata"])
+        self.assertNotIn("input_priority", descriptor["metadata"])
 
     def test_agent_context_rejects_subtitle_timeline_past_video_end(self) -> None:
         self.subtitle.write_text(

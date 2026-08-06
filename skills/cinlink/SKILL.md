@@ -37,6 +37,8 @@ Route to `/cinlink-subtitles` for:
 
 For app-like "add subtitles" requests, `/cinlink-subtitles` should use `cinlink --json add-subtitles` instead of manually composing `transcribe` and `burn`.
 
+For free-form video translation, use `/cinlink-agent` when `translation_mode` or the subtitle `output_delivery` is unresolved. Ask subtitles versus dubbing first; for subtitle mode, ask subtitle file versus burned video next. Do not execute a model-default choice.
+
 For video transcription or translation, the current CLI keeps the full video local and uploads only audio extracted with local `ffmpeg`.
 
 ### Dubbing Workflows
@@ -63,6 +65,8 @@ Route to `/cinlink-understanding` for:
 - "turn this long video into short clips"
 
 For video summary and shortening, the current CLI also keeps the full video local, uploads extracted audio for hosted analysis, and preserves the local video path for rendering.
+
+Local files passed to an Agent run are marked as the current submission and receive highest input priority over stale conversation artifacts. Multiple current files remain ambiguous and may still require clarification.
 
 ### Local Editing Workflows
 

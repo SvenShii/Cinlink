@@ -21,7 +21,7 @@ For video input, the CLI extracts audio locally with `ffmpeg` and uploads only t
 cinlink --json shorten /absolute/video.mp4 --target-duration 45 --max-clips 5 --out /absolute/out
 ```
 
-The CLI keeps the full video local, uploads extracted audio for hosted analysis, and returns `source_video_path` with the highlight plan and artifact paths when available. Use `/cinlink-editing` to render known timestamp ranges with `trim-video` or combine selected ranges with `montage`; use `/cinlink-agent` when the plan requires broader orchestration.
+The CLI keeps the full video local, uploads extracted audio through the account-scoped Agent file endpoint, and reuses the returned `cloud_file_id` for shortening when the runtime supports it. Older runtimes receive the same audio through compatibility multipart upload. The result preserves `source_video_path` with the highlight plan and artifact paths when available. Use `/cinlink-editing` to render known timestamp ranges with `trim-video` or combine selected ranges with `montage`; use `/cinlink-agent` when the plan requires broader orchestration.
 
 When the user already has a valid timed subtitle, pass both video and subtitle through `/cinlink-agent`; the CLI marks a single SRT/VTT/ASS reusable and binds it to the source video, avoiding unnecessary transcription. With several subtitles, preserve `artifact_role`, `target_language`, and source-video lineage in `--context-json` so the runtime can select the intended language.
 

@@ -23,12 +23,12 @@
     },
     {
       "name": "cinlink_agent_run",
-      "description": "Submit a natural-language media task to the CinLink hosted agent.",
+      "description": "Submit a natural-language media task with current-input priority, slot provenance, and structured translation-delivery clarification.",
       "tool_arg": "agent_run"
     },
     {
       "name": "cinlink_agent_clarify",
-      "description": "Answer a structured clarification and continue the same CinLink agent task.",
+      "description": "Answer one structured clarification and continue the same task; subtitle translation may ask output delivery next.",
       "tool_arg": "agent_clarify"
     },
     {
@@ -98,7 +98,7 @@
     },
     {
       "name": "cinlink_shorten",
-      "description": "Create a highlight plan from locally extracted video audio and retain the source path for rendering.",
+      "description": "Create a highlight plan from account-scoped cloud-referenced audio, with compatibility upload fallback, and retain the local source path.",
       "tool_arg": "shorten"
     },
     {

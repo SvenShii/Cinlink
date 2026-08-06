@@ -191,19 +191,21 @@ class RuntimeClient:
         music_prompt: str | None = None,
     ) -> dict[str, Any]:
         checked = require_existing_file(video_path)
-        payload = self._multipart_audio_or_file(
-            "/v1/shorten",
-            checked,
-            {
-                "output_dir": str(out) if out else None,
-                "max_clips": str(max_clips),
-                "target_duration_sec": str(target_duration),
-                "style_preset": style_preset,
-                "music_mode": music_mode,
-                "music_prompt": music_prompt,
-            },
-            temp_prefix="cinlink-shorten-audio-",
-        )
+        fields = {
+            "output_dir": str(out) if out else None,
+            "max_clips": str(max_clips),
+            "target_duration_sec": str(target_duration),
+            "style_preset": style_preset,
+            "music_mode": music_mode,
+            "music_prompt": music_prompt,
+        }
+        if _looks_like_video(checked):
+            with tempfile.TemporaryDirectory(prefix="cinlink-shorten-audio-") as temp_dir:
+                audio_path = Path(temp_dir) / "source.m4a"
+                _extract_audio_for_upload(checked, audio_path)
+                payload = self._submit_shorten_audio(audio_path, fields)
+        else:
+            payload = self._submit_shorten_audio(checked, fields)
         return _annotate_local_media_payload(payload, checked, cloud_step="shorten_video")
 
     def image(
@@ -353,8 +355,14 @@ class RuntimeClient:
         hidden_context: str | None = None,
         client_capabilities: dict[str, bool] | None = None,
     ) -> dict[str, Any]:
-        request_files = [_context_file_payload(path) for path in (context_files or [])]
-        request_files.extend(_context_descriptor_payload(item) for item in (context_descriptors or []))
+        request_files = [
+            _context_file_payload(path, current_submission=True)
+            for path in (context_files or [])
+        ]
+        request_files.extend(
+            _context_descriptor_payload(item, current_submission=False)
+            for item in (context_descriptors or [])
+        )
         request_files = _dedupe_context_files(request_files)
         request_files = _annotate_context_relationships(request_files)
         capabilities = dict(client_capabilities if client_capabilities is not None else default_client_capabilities())
@@ -737,6 +745,46 @@ class RuntimeClient:
             uploaded.append(reference_url)
         return uploaded
 
+    def _submit_shorten_audio(
+        self,
+        audio_path: Path,
+        fields: dict[str, Any],
+    ) -> dict[str, Any]:
+        checked = require_existing_file(audio_path)
+        try:
+            uploaded = self._upload_agent_file(checked, kind="audio")
+        except CliError as exc:
+            if not _is_cloud_file_shorten_compatibility_error(exc):
+                raise
+            return self._multipart("/v1/shorten", checked, fields)
+
+        cloud_file_id = _agent_upload_cloud_file_id(uploaded)
+        if not cloud_file_id:
+            return self._multipart("/v1/shorten", checked, fields)
+
+        data = {key: value for key, value in fields.items() if value is not None}
+        try:
+            return self._request(
+                "POST",
+                "/v1/shorten",
+                data=data,
+                files={"cloud_file_id": (None, cloud_file_id)},
+            )
+        except CliError as exc:
+            if not _is_cloud_file_shorten_compatibility_error(exc):
+                raise
+            return self._multipart("/v1/shorten", checked, fields)
+
+    def _upload_agent_file(self, input_path: Path, *, kind: str) -> dict[str, Any]:
+        checked = require_existing_file(input_path)
+        with checked.open("rb") as handle:
+            return self._request(
+                "POST",
+                "/v1/agent/files",
+                data={"kind": kind},
+                files={"file": (checked.name, handle)},
+            )
+
     def _multipart_audio_or_file(
         self,
         path: str,
@@ -891,6 +939,49 @@ def _compact(payload: dict[str, Any]) -> dict[str, Any]:
     return {key: value for key, value in payload.items() if value is not None}
 
 
+def _agent_upload_cloud_file_id(payload: dict[str, Any]) -> str | None:
+    artifact = payload.get("artifact")
+    artifact = artifact if isinstance(artifact, dict) else {}
+    metadata = artifact.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    value = (
+        payload.get("cloud_file_id")
+        or artifact.get("cloud_file_id")
+        or metadata.get("cloud_file_id")
+    )
+    normalized = str(value or "").strip()
+    return normalized or None
+
+
+def _is_cloud_file_shorten_compatibility_error(error: CliError) -> bool:
+    normalized_code = error.code.strip().lower().replace("-", "_")
+    if normalized_code not in {
+        "invalid_input",
+        "invalid_response",
+        "job_not_found",
+        "not_found",
+        "processing_failed",
+        "remote_error",
+        "unsupported",
+    }:
+        return False
+    status_code = (error.details or {}).get("status_code")
+    normalized = f"{normalized_code} {error.message}".lower().replace("-", "_")
+    return status_code == 404 or any(
+        marker in normalized
+        for marker in (
+            "agent file",
+            "agent_file",
+            "cloud file",
+            "cloud_file",
+            "missing upload",
+            "not found",
+            "not_found",
+            "unsupported",
+        )
+    )
+
+
 def _discover_reference_subtitle(translated_subtitle: Path) -> Path | None:
     translated = translated_subtitle.expanduser().resolve()
     for filename in ("source.reference.srt", "subtitle.reference.srt", "source.srt"):
@@ -1007,13 +1098,24 @@ def _continuation_context_descriptors(value: Any) -> list[dict[str, Any]]:
     return descriptors
 
 
-def _context_file_payload(path: Path) -> dict[str, Any]:
+def _context_file_payload(
+    path: Path,
+    *,
+    current_submission: bool,
+) -> dict[str, Any]:
     checked = require_existing_file(path)
     kind = "subtitle" if checked.suffix.lower() == ".txt" else infer_artifact_kind(checked)
     metadata = {
         "file_size_bytes": str(checked.stat().st_size),
         "artifact_original_name": checked.name,
     }
+    if current_submission:
+        metadata.update(
+            {
+                "selection_scope": "current_submission",
+                "input_priority": "highest",
+            }
+        )
     if kind == "subtitle" and _subtitle_file_has_usable_cues(checked):
         metadata.update(
             {
@@ -1244,11 +1346,22 @@ def _unique_context_video_for_subtitle(
     return stem_matches[0] if len(stem_matches) == 1 else None
 
 
-def _context_descriptor_payload(value: dict[str, Any]) -> dict[str, Any]:
+def _context_descriptor_payload(
+    value: dict[str, Any],
+    *,
+    current_submission: bool,
+) -> dict[str, Any]:
     if not isinstance(value, dict):
         raise CliError("invalid_input", "Each context descriptor must be a JSON object.")
     raw_path = value.get("path") or value.get("local_path") or value.get("local_hint")
-    payload = _context_file_payload(Path(str(raw_path))) if raw_path else {}
+    payload = (
+        _context_file_payload(
+            Path(str(raw_path)),
+            current_submission=current_submission,
+        )
+        if raw_path
+        else {}
+    )
     metadata = dict(payload.get("metadata") or {})
     supplied_metadata = value.get("metadata")
     if supplied_metadata is not None and not isinstance(supplied_metadata, dict):

@@ -134,7 +134,7 @@ Returns summary text, highlights, `source_video_path`, and artifact paths when a
 cinlink --json shorten <video_path> --target-duration 45 --max-clips 5 --out <dir>
 ```
 
-Optional: `--style-preset`, `--music-mode`, `--music-prompt`. The CLI keeps the full video local, uploads extracted audio for hosted analysis, and returns `source_video_path` for later local rendering.
+Optional: `--style-preset`, `--music-mode`, `--music-prompt`. The CLI keeps the full video local, uploads extracted audio to the account-scoped Agent file endpoint, then submits its `cloud_file_id` for hosted analysis. It falls back to compatibility multipart upload when an older runtime does not support cloud audio references. The result returns `source_video_path` for later local rendering.
 
 ### image
 
@@ -214,9 +214,9 @@ Use for broad, multi-step media workflows. When the app surface action is known,
 cinlink --json agent run "Add English subtitles and return the subtitled video." --context-file <path> --client-request-id <id> --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --mode execute --wait
 ```
 
-Use repeated `--task-param KEY=VALUE` or `--task-parameters-json '{"key":"value"}'` for explicit slots such as `output_delivery`, `target_language`, `source_language`, `subtitle_language`, and `translation_mode`. Current prompt language and task parameters override historical conversation state.
+Use repeated `--task-param KEY=VALUE` or `--task-parameters-json '{"key":"value"}'` for explicit slots such as `output_delivery`, `target_language`, `source_language`, `subtitle_language`, and `translation_mode`. Current prompt language and task parameters override historical conversation state. For free-form media translation, resolve `translation_mode=subtitle|voice` first; subtitle mode then requires `output_delivery=subtitle_file|burned_video`. Do not execute either choice from `workflow_decision.slot_provenance` sources `model_default` or `unknown`.
 
-Pass `--app-language zh|en|ja` whenever the caller knows the user's language. Use repeated `--context-json '<object>'` for follow-up artifacts carrying `public_url`, `cloud_file_id`, `artifact_role`, `producer_step`, or other identity/lineage metadata.
+Pass `--app-language zh|en|ja` whenever the caller knows the user's language. Plain `--context-file` values are marked `selection_scope=current_submission` and `input_priority=highest`. Use repeated `--context-json '<object>'` for follow-up artifacts carrying `public_url`, `cloud_file_id`, `artifact_role`, `producer_step`, or other identity/lineage metadata; set the two priority fields in `metadata` only when a descriptor is explicitly selected for the current request.
 
 Use `--hidden-context` or `--hidden-context-file` for invisible client UI context such as selected settings. Do not put secrets there, and do not copy hidden context into assistant-visible output or provider prompts.
 
@@ -234,7 +234,7 @@ When `agent run`, `agent poll`, or a waited result returns `status=requires_user
 cinlink --json agent clarify <run_id> --clarification-id <id> --value <option_value_or_label> --wait --include-events
 ```
 
-Use `--answer` for `input_kind=text`. `--clarification-id` is optional only when exactly one clarification exists. The command carries forward the prior conversation, task frame, context artifacts, app language, and compound execution plan. A `requires_user_input` result without `clarifications` is usually an install/authorization request and must not be sent to this command.
+Use `--answer` for `input_kind=text`. `--clarification-id` is optional only when exactly one clarification exists. Answer multiple questions one at a time. Selecting subtitle translation may return a second `output_delivery` clarification; present it instead of assuming a default. The command carries forward the prior conversation, task frame, context artifacts, app language, and compound execution plan. A `requires_user_input` result without `clarifications` is usually an install/authorization request and must not be sent to this command.
 
 Also available: `agent poll`, `agent events`, `agent local-tools`, `agent report-tool-result`. `agent events` reads public planning/reasoning progress over SSE; it never exposes hidden model scratch work. The report command infers artifact kind for `--artifact-path`. Use repeated `--artifact-json` and `--artifact-metadata-json` to preserve per-artifact roles and lineage.
 

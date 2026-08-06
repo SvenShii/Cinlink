@@ -54,7 +54,7 @@ cinlink --json agent run "Animate this image." --app-language en --context-json 
 
 - Use hosted generation only after API key setup via `/cinlink-cli`.
 - Local image paths are supported for first-frame and reference-image inputs. Reference video/audio inputs remain remote URLs.
-- When several image artifacts are present, preserve and pass the exact selected artifact `id`, `cloud_file_id`, and `public_url`; do not let an unrelated URL override the explicitly bound image.
+- When several image artifacts are present, preserve and pass the exact selected artifact `id`, `cloud_file_id`, and `public_url`; do not let an unrelated URL override the explicitly bound image. If the selected reference cannot be resolved to an authorized public URL, stop and ask for that image again instead of substituting an older context image.
 - Use `/cinlink-deconstruction` when the task starts from an existing video's shots or needs person/product/scene replacement with cross-shot continuity.
 - Reuse returned `public_url`, `cloud_file_id`, `artifact_role`, and `producer_step` in follow-up context so the runtime can preserve generated-media lineage.
 - On `content_ip_violation`, do not retry the same request. Ask for an original character description or a different reference image.
