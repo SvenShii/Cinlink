@@ -18,6 +18,7 @@ from .dependencies import local_dependency_report, require_local_voice_separatio
 from .deconstruction import deconstruct_video, regenerate_deconstruction
 from .editor_exports import export_audio, export_editor_project, export_video
 from .errors import CliError
+from .enhancement import enhance_image, enhance_video
 from .local_setup import setup_local_dependencies
 from .local_tools import (
     apply_watermark,
@@ -122,6 +123,8 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             skip_ffmpeg=bool(args.get("skip_ffmpeg", False)),
             with_voice_separation=bool(args.get("with_voice_separation", False)),
             skip_voice_separation=bool(args.get("skip_voice_separation", False)),
+            with_enhancement=bool(args.get("with_enhancement", False)),
+            skip_enhancement=bool(args.get("skip_enhancement", False)),
             interactive=False,
         )
     if name == "brand_kit":
@@ -150,6 +153,8 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
         "export_audio",
         "export_editor_project",
         "export_video",
+        "enhance_image",
+        "enhance_video",
         "mix_dubbed_audio",
         "montage",
         "trim_video",
@@ -264,6 +269,22 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             start_sec=float(args["start_sec"]),
             end_sec=float(args["end_sec"]),
             out=_path(args.get("out")),
+        )
+    if name == "enhance_image":
+        return enhance_image(
+            Path(args["image_path"]),
+            out=_path(args.get("out")),
+            scale=int(args.get("scale", 2)),
+            noise_level=int(args.get("noise_level", 1)),
+            model=str(args.get("model", "photo")),
+        )
+    if name == "enhance_video":
+        return enhance_video(
+            Path(args["video_path"]),
+            out=_path(args.get("out")),
+            scale=int(args.get("scale", 2)),
+            noise_level=int(args.get("noise_level", 1)),
+            model=str(args.get("model", "photo")),
         )
     if name == "montage":
         clips = args.get("clips")
@@ -417,6 +438,7 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             clarification_id=args.get("clarification_id"),
             value=args.get("value"),
             answer=args.get("answer"),
+            answers=_string_dict(args.get("answers")),
             client_request_id=args.get("client_request_id"),
             wait=bool(args.get("wait", False)),
             include_events=bool(args.get("include_events", False)),

@@ -22,13 +22,13 @@ After the CLI is installed, run the local dependency setup:
 cinlink setup-local-deps
 ```
 
-This checks local `ffmpeg`/`ffprobe` for subtitle burn-in, audio work, Clean Cut, trimming, montage, watermark export, video deconstruction/assembly, media export, and editor project handoff, then prompts before using a platform package manager to install it. It also offers optional `demucs` and `soundfile` for local voice separation/background preservation. For non-interactive agents, first show a dry run:
+This checks local `ffmpeg`/`ffprobe` for media work, then prompts before using a platform package manager to install it. It also checks optional `demucs`/`soundfile` for voice separation and the verified `waifu2x-ncnn-vulkan` model bundle for image/video enhancement. For non-interactive agents, first show a dry run:
 
 ```bash
-cinlink --json setup-local-deps --dry-run --with-voice-separation
+cinlink --json setup-local-deps --dry-run --with-voice-separation --with-enhancement
 ```
 
-Only run `cinlink setup-local-deps --yes` or `cinlink setup-local-deps --yes --with-voice-separation` after the user explicitly confirms.
+Only run `cinlink setup-local-deps --yes` or optional `--with-voice-separation`/`--with-enhancement` variants after the user explicitly confirms. If enhancement reports `manual_required`, use the CinLink app-managed bundle or a verified waifu2x directory; never download an unverified model archive.
 
 Windows users can also run:
 
@@ -64,7 +64,7 @@ Run this before local-only tasks or when a hosted request fails:
 cinlink --json doctor
 ```
 
-`doctor` reports API key presence, runtime health, local `ffmpeg`, Demucs, and `soundfile` status. If voice separation or background preservation is requested and dependencies are missing, ask before installing anything.
+`doctor` reports API key presence, runtime health, local `ffmpeg`, Demucs, `soundfile`, waifu2x, and enhancement-model status. Ask before installing anything.
 
 Hosted job failures may include safe `error.details` such as `processing_stage`, `provider`, `request_id`, and `retryable`. Keep those fields for diagnostics and retry only when `retryable=true`.
 
@@ -99,6 +99,8 @@ cinlink --json tools schema dub
 cinlink --json tools schema setup_local_deps
 cinlink --json tools schema clean_cut
 cinlink --json tools schema brand_kit
+cinlink --json tools schema enhance_image
+cinlink --json tools schema enhance_video
 cinlink --json tools schema deconstruct_video
 cinlink --json tools schema export_editor_project
 cinlink --json tools schema agent_clarify

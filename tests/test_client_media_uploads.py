@@ -380,12 +380,121 @@ class RuntimeClientMediaUploadTests(unittest.TestCase):
         self.assertEqual(create.call_args.kwargs["conversation_id"], "conversation-1")
         self.assertEqual(
             create.call_args.kwargs["task_parameters"],
-            {"translation_mode": "voice"},
+            {
+                "translation_mode": "voice",
+                "__clarification_reply_language": "zh-Hans",
+            },
         )
+        self.assertEqual(create.call_args.kwargs["task_intent"], None)
         frame = create.call_args.kwargs["conversation_state"]["agent_task_frame_json"]
         self.assertEqual(frame.count("workflow_decision"), 1)
         self.assertEqual(create.call_args.kwargs["context_descriptors"][0]["id"], "video-1")
         self.assertEqual(result["continued_from_run_id"], "run-1")
+
+    def test_agent_clarification_collects_all_answers_and_custom_duration(self) -> None:
+        previous = {
+            "run_id": "run-1",
+            "conversation_id": "conversation-1",
+            "status": "requires_user_input",
+            "mode": "execute",
+            "app_language": "zh",
+            "conversation_state": {},
+            "task_frame": {"workflow_decision": {"workflow_id": "shorten_video"}},
+            "context_files": [],
+            "clarifications": [
+                {
+                    "id": "target_duration_sec:0",
+                    "slot_key": "target_duration_sec",
+                    "workflow_id": "shorten_video",
+                    "question": "目标时长？",
+                    "input_kind": "single_select",
+                    "options": [{"value": "60", "label": "60 秒"}],
+                },
+                {
+                    "id": "require_audio:1",
+                    "slot_key": "require_audio",
+                    "workflow_id": "shorten_video",
+                    "question": "保留声音？",
+                    "input_kind": "single_select",
+                    "options": [
+                        {"value": "true", "label": "保留声音"},
+                        {"value": "false", "label": "静音"},
+                    ],
+                },
+            ],
+        }
+        with patch.object(
+            self.client, "get_agent_run", return_value=previous
+        ), patch.object(
+            self.client,
+            "create_agent_run",
+            return_value={"run_id": "run-2", "status": "queued"},
+        ) as create:
+            result = self.client.continue_agent_clarification(
+                "run-1",
+                answers={"target_duration_sec": "1:30", "require_audio:1": "保留声音"},
+            )
+
+        self.assertEqual(create.call_args.args[0], "90；保留声音")
+        self.assertEqual(create.call_args.kwargs["task_intent"], "shorten_video")
+        self.assertEqual(
+            create.call_args.kwargs["task_parameters"],
+            {
+                "target_duration_sec": "90",
+                "require_audio": "true",
+                "__clarification_reply_language": "zh",
+            },
+        )
+        self.assertEqual(len(result["answered_clarifications"]), 2)
+        self.assertIsNone(result["answered_clarification"])
+
+    def test_agent_file_clarification_resolves_name_to_entity_id(self) -> None:
+        previous = {
+            "run_id": "run-1",
+            "conversation_id": "conversation-1",
+            "status": "requires_user_input",
+            "mode": "execute",
+            "app_language": "en",
+            "conversation_state": {},
+            "task_frame": {"workflow_decision": {"workflow_id": "summarize_video"}},
+            "context_files": [
+                {
+                    "id": "context-video-1",
+                    "entity_id": "entity-video-1",
+                    "name": "Demo Clip.mp4",
+                    "kind": "video",
+                    "metadata": {},
+                }
+            ],
+            "clarifications": [
+                {
+                    "id": "media_id:0",
+                    "slot_key": "media_id",
+                    "workflow_id": "summarize_video",
+                    "question": "Which video?",
+                    "input_kind": "text",
+                    "options": [],
+                }
+            ],
+        }
+        with patch.object(
+            self.client, "get_agent_run", return_value=previous
+        ), patch.object(
+            self.client,
+            "create_agent_run",
+            return_value={"run_id": "run-2", "status": "queued"},
+        ) as create:
+            self.client.continue_agent_clarification(
+                "run-1",
+                answer="Demo Clip.mp4",
+            )
+
+        parameters = create.call_args.kwargs["task_parameters"]
+        self.assertEqual(parameters["media_id"], "entity-video-1")
+        self.assertEqual(parameters["selected_entity_id"], "entity-video-1")
+        self.assertEqual(parameters["video_entity_id"], "entity-video-1")
+        descriptor = create.call_args.kwargs["context_descriptors"][0]
+        self.assertEqual(descriptor["metadata"]["selection_scope"], "current_submission")
 
     def test_failed_job_preserves_safe_retry_diagnostics(self) -> None:
         with patch.object(

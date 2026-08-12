@@ -1,6 +1,6 @@
 ---
 name: cinlink
-description: "READ THIS FIRST for any request to use CinLink media capabilities from an agent: transcribe videos, generate/translate/burn subtitles, dub videos, summarize or shorten media, deconstruct or recreate videos, replace visual references, edit/export media, generate AI images/videos, or run hosted CinLink agent workflows. Router and capability map for the CinLink domain skills. Hosted capabilities require a user-provided CinLink API key; local editing/export does not."
+description: "READ THIS FIRST for any request to use CinLink media capabilities from an agent: transcribe videos, generate/translate/burn subtitles, dub videos, summarize or shorten media, deconstruct or recreate videos, replace visual references, enhance/edit/export media, generate AI images/videos, or run hosted CinLink agent workflows. Router and capability map for the CinLink domain skills. Hosted capabilities require a user-provided CinLink API key; local enhancement/editing/export does not."
 ---
 
 # CinLink — Start Here
@@ -13,7 +13,7 @@ CinLink exposes the app's media workflows to coding agents through the standalon
 | --- | --- |
 | Install/configure the CLI, store an API key, check runtime/local dependencies, inspect tool schemas | `/cinlink-cli` |
 | Add subtitles to a video, transcribe media, translate subtitles/media, burn styled subtitles into a local video | `/cinlink-subtitles` |
-| Remove pauses, trim or montage clips, apply watermarks/Brand Kits, export video/audio/editor projects | `/cinlink-editing` |
+| Enhance images/videos, remove pauses, trim or montage clips, apply watermarks/Brand Kits, export media/editor projects | `/cinlink-editing` |
 | Voice-translate/dub videos, generate dubbed audio, mix dubbed audio with the original video | `/cinlink-dubbing` |
 | Summarize videos, extract highlights, plan short clips from long videos | `/cinlink-understanding` |
 | Generate AI images or AI videos through the hosted runtime | `/cinlink-generation` |
@@ -72,6 +72,7 @@ Local files passed to an Agent run are marked as the current submission and rece
 
 Route to `/cinlink-editing` for:
 
+- "enhance/upscale this image or video"
 - "remove the long pauses" or "Clean Cut"
 - "cut 12.4 to 18.8 seconds"
 - "combine these selected ranges into a montage"
@@ -80,7 +81,7 @@ Route to `/cinlink-editing` for:
 - "export this as MOV/AVI/MKV or WAV/MP3"
 - "make a CapCut/Premiere/Final Cut/Resolve project handoff"
 
-These operations are local-only and do not need an API key. They require local `ffmpeg`/`ffprobe`. Enabled Brand Kit settings automatically apply to later subtitle and watermark exports.
+These operations are local-only and do not need an API key. Video operations require local `ffmpeg`/`ffprobe`; enhancement also requires the verified waifu2x binary and model directories. Enabled Brand Kit settings automatically apply to later subtitle and watermark exports.
 
 ### Deconstruction Workflows
 
@@ -121,7 +122,8 @@ CinLink is hosted-first. Provider credentials stay on the server. Local dependen
 
 - `ffmpeg`/`ffprobe`: subtitle burn, local audio extraction/mix, Clean Cut, trimming, montage, watermarking, video deconstruction/assembly, media export, editor project handoff, local media probing
 - `demucs` + `soundfile`: local voice separation/background preservation
+- `waifu2x-ncnn-vulkan` + photo/cunet/anime model directories: local image/video enhancement
 
-During install or reconnect, run `cinlink setup-local-deps` so the user is prompted to install local `ffmpeg` and optionally `demucs`/`soundfile`. In non-interactive contexts, show `cinlink --json setup-local-deps --dry-run --with-voice-separation` first, then install only after explicit confirmation.
+During install or reconnect, run `cinlink setup-local-deps` so the user is prompted to install local `ffmpeg` and offered optional voice-separation/enhancement components. In non-interactive contexts, show `cinlink --json setup-local-deps --dry-run --with-voice-separation --with-enhancement` first, then install only after explicit confirmation.
 
 Do not install local dependencies silently. Ask the user first.

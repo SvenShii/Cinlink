@@ -17,6 +17,8 @@ def setup_local_dependencies(
     skip_ffmpeg: bool = False,
     with_voice_separation: bool = False,
     skip_voice_separation: bool = False,
+    with_enhancement: bool = False,
+    skip_enhancement: bool = False,
     interactive: bool = True,
 ) -> dict[str, Any]:
     before = local_dependency_report()
@@ -66,6 +68,36 @@ def setup_local_dependencies(
                     "component": "voice_separation",
                     "status": "skipped",
                     "reason": "Optional dependencies are installed only with user confirmation or --with-voice-separation.",
+                }
+            )
+
+    if not skip_enhancement:
+        enhancement_ready = bool(before["local_media_enhancement"].get("available"))
+        if enhancement_ready:
+            actions.append(
+                {
+                    "component": "media_enhancement",
+                    "status": "already_available",
+                    "path": before["waifu2x"].get("path"),
+                }
+            )
+        elif with_enhancement or interactive:
+            actions.append(
+                _maybe_configure_manual_component(
+                    component="media_enhancement",
+                    reason="Optional: local image/video enhancement needs the verified waifu2x-ncnn-vulkan binary and its photo, cunet, and anime model directories.",
+                    assume_yes=assume_yes if with_enhancement else False,
+                    dry_run=dry_run,
+                    interactive=interactive,
+                    prompt="Configure the optional CinLink local enhancement component now?",
+                )
+            )
+        else:
+            actions.append(
+                {
+                    "component": "media_enhancement",
+                    "status": "skipped",
+                    "reason": "The enhancement component is configured only with user confirmation or --with-enhancement.",
                 }
             )
 
@@ -141,6 +173,38 @@ def _maybe_install_component(
         "status": "installed",
         "reason": reason,
         "commands": completed_commands,
+    }
+
+
+def _maybe_configure_manual_component(
+    *,
+    component: str,
+    reason: str,
+    assume_yes: bool,
+    dry_run: bool,
+    interactive: bool,
+    prompt: str,
+) -> dict[str, Any]:
+    message = _manual_install_message(component)
+    if dry_run:
+        return {
+            "component": component,
+            "status": "would_configure",
+            "reason": reason,
+            "message": message,
+        }
+    if not _confirm(prompt, assume_yes=assume_yes, interactive=interactive):
+        return {
+            "component": component,
+            "status": "needs_confirmation",
+            "reason": reason,
+            "message": message,
+        }
+    return {
+        "component": component,
+        "status": "manual_required",
+        "reason": reason,
+        "message": message,
     }
 
 
@@ -222,6 +286,11 @@ def _manual_install_message(component: str) -> str:
         )
     if component == "voice_separation":
         return "Install optional voice-separation packages with `python -m pip install --upgrade demucs soundfile`."
+    if component == "media_enhancement":
+        return (
+            "Install the CinLink app/local enhancement component, or set CINLINK_WAIFU2X_DIR to a verified "
+            "waifu2x-ncnn-vulkan directory containing the photo, cunet, and anime model folders; then run `cinlink --json doctor`."
+        )
     return "Install the missing component manually, then run `cinlink --json doctor`."
 
 

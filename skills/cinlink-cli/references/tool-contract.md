@@ -24,11 +24,11 @@ Reports API-key presence, runtime health, and local dependency status.
 
 ```bash
 cinlink setup-local-deps
-cinlink --json setup-local-deps --dry-run --with-voice-separation
+cinlink --json setup-local-deps --dry-run --with-voice-separation --with-enhancement
 cinlink setup-local-deps --yes
 ```
 
-Prompts the user to install local dependencies. `ffmpeg`/`ffprobe` are recommended for subtitle burn-in, local audio extraction/mixing, Clean Cut, trim/montage, watermark export, video deconstruction/assembly, media export, editor project handoff, and local media inspection. `demucs` plus `soundfile` are optional and are only needed for local voice separation/background preservation. Do not run with `--yes` until the user has confirmed.
+Prompts the user to install local dependencies. `ffmpeg`/`ffprobe` are recommended for subtitle burn-in, local audio extraction/mixing, Clean Cut, trim/montage, watermark export, video deconstruction/assembly, media export, editor project handoff, and local media inspection. `demucs` plus `soundfile` are optional for voice separation. The optional enhancement component contains `waifu2x-ncnn-vulkan` plus photo/cunet/anime model directories; use `--with-enhancement` only after confirmation. Do not run with `--yes` until the user has confirmed.
 
 ### transcribe
 
@@ -77,6 +77,15 @@ cinlink --json apply-watermark <video_path> --watermark-text "Example" --out <di
 ```
 
 Local-only. Text/image watermark arguments match `burn`. When no one-off watermark is supplied, the enabled Brand Kit logo/text is used.
+
+### enhance-image / enhance-video
+
+```bash
+cinlink --json enhance-image <image_path> --model photo --scale 2 --noise-level 1 --out <dir>
+cinlink --json enhance-video <video_path> --model photo --scale 2 --noise-level 1 --out <dir>
+```
+
+Local-only and no API key is required. Image enhancement accepts PNG/JPEG/WebP/HEIC/GIF and writes lossless PNG. Video enhancement processes frames locally and preserves the original audio. Both need the verified waifu2x component; video also needs `ffmpeg`/`ffprobe`.
 
 ### trim-video
 
@@ -220,9 +229,11 @@ Pass `--app-language zh|en|ja` whenever the caller knows the user's language. Pl
 
 Use `--hidden-context` or `--hidden-context-file` for invisible client UI context such as selected settings. Do not put secrets there, and do not copy hidden context into assistant-visible output or provider prompts.
 
-The Hermes-first agent may return `execute_plan`, `research_capability`, or `propose_workaround`. Its local media tool set includes subtitle staging, analyzed-video search, audio/frame extraction, probing, trim/crop/transcode, watermark/subtitle burn, highlight/visual/styled rendering, music mixing, clip merging, enhancement, and dubbed-video composition. It can also request authorized local file search/read, clipboard, screenshot, or app context. Hosted nodes include transcription, translation, speech synthesis, summary, shortening, frame deconstruction, image/video generation, and public web query. Only execute a local tool if the corresponding client capability and user authorization are present. Typed dubbing plans use local `extract_audio`, server `transcribe_audio`/`translate_subtitle`/`synthesize_dub_audio`, then local `compose_dubbed_video` when available. For shortened dubbed video, compose the full-length dubbed timeline before highlight rendering.
+The Hermes-first agent may return `execute_plan`, `research_capability`, or `propose_workaround`. Its local media tool set includes audio/subtitle staging, analyzed-video search, audio/frame extraction, probing, trim/crop/transcode, watermark/subtitle burn, highlight/visual/styled rendering, music mixing, clip merging, image/video enhancement, and dubbed-video composition. It can also request authorized local file search/read, clipboard, screenshot, or app context. Hosted nodes include transcription, translation, speech synthesis, summary, shortening, frame deconstruction, image/video generation, and public web query. Only execute a local tool if the corresponding client capability and user authorization are present. Typed dubbing plans use local `extract_audio`, server `transcribe_audio`/`translate_subtitle`/`synthesize_dub_audio`, then local `compose_dubbed_video` when available. For shortened dubbed video, compose the full-length dubbed timeline before highlight rendering.
 
 Agent tool arguments are string-only on the wire. Booleans use `true`/`false`; list-like values may use newline-delimited, comma-delimited, or JSON-array strings.
+
+Use `input_collections` for ordered multi-artifact ports and resolve every binding. Do not comma-join collections into `inputs`. Preserve `kind=edit_plan` artifacts and their `highlight_plan_status`, `highlight_plan_revision`, and `target_duration_sec` metadata so approved plans can be rendered without replanning.
 
 A valid local SRT/VTT/ASS passed with one video is marked reusable and linked to that video. When `ffprobe` is available, the CLI rejects reuse if cue starts exceed video duration plus 1.5 seconds or cue ends exceed the dynamic 3-10 second grace window. With multiple subtitles or images, preserve exact ids, language, artifact role, source lineage, `cloud_file_id`, and `public_url` through `--context-json` so the execution DAG binds the intended artifact.
 
@@ -231,12 +242,14 @@ A valid local SRT/VTT/ASS passed with one video is marked reusable and linked to
 When `agent run`, `agent poll`, or a waited result returns `status=requires_user_input` with structured `clarifications`, show the question and option labels to the user, then continue the original task:
 
 ```bash
-cinlink --json agent clarify <run_id> --clarification-id <id> --value <option_value_or_label> --wait --include-events
+cinlink --json agent clarify <run_id> --response <id_or_slot>=<value> --response <id_or_slot>=<value> --wait --include-events
 ```
 
-Use `--answer` for `input_kind=text`. `--clarification-id` is optional only when exactly one clarification exists. Answer multiple questions one at a time. Selecting subtitle translation may return a second `output_delivery` clarification; present it instead of assuming a default. The command carries forward the prior conversation, task frame, context artifacts, app language, and compound execution plan. A `requires_user_input` result without `clarifications` is usually an install/authorization request and must not be sent to this command.
+Collect every clarification before continuing and send the complete answer set once. `--answers-json` is equivalent to repeated `--response`. The older `--clarification-id` plus `--value`/`--answer` form remains valid for one question. `target_duration_sec` accepts 10-600 seconds, `MM:SS`, `HH:MM:SS`, or localized units. The command carries forward the prior workflow id, conversation, task frame, context artifacts, app language, and compound execution plan. A `requires_user_input` result without `clarifications` is usually an install/authorization request and must not be sent to this command.
 
-Also available: `agent poll`, `agent events`, `agent local-tools`, `agent report-tool-result`. `agent events` reads public planning/reasoning progress over SSE; it never exposes hidden model scratch work. The report command infers artifact kind for `--artifact-path`. Use repeated `--artifact-json` and `--artifact-metadata-json` to preserve per-artifact roles and lineage.
+Media/subtitle selection clarifications accept an exact option value, stable context id, or unique exact context filename. The continuation resolves the name to `entity_id` and marks that descriptor as the current submission. Ambiguous names or the wrong media kind fail instead of selecting another file.
+
+Also available: `agent poll`, `agent events`, `agent local-tools`, `agent report-tool-result`. `agent events` reads public planning/reasoning progress over SSE; it never exposes hidden model scratch work. The report command infers artifact kind for `--artifact-path`. Use `--upload-for-cloud-model-input` when reporting `stage_audio` or another non-video local tool output explicitly requested as cloud-model input; it uploads through the authenticated account-scoped Agent file endpoint. It refuses full video uploads. Use repeated `--artifact-json` and `--artifact-metadata-json` to preserve per-artifact roles and lineage.
 
 Completed agent results include `completion_message`, `primary_artifacts`, `supporting_artifacts`, and `intermediate_artifacts`. Deliver primary artifacts as the result, mention supporting artifacts when useful, and do not present intermediate artifacts as final output.
 

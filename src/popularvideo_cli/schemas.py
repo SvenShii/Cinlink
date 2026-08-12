@@ -40,7 +40,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         },
     },
     "setup_local_deps": {
-        "description": "Check and optionally install CinLink local dependencies. Prompts or requires explicit yes before installing ffmpeg; optional voice-separation dependencies install only when requested.",
+        "description": "Check and optionally install CinLink local dependencies. Prompts or requires explicit yes before installing ffmpeg; optional voice-separation and enhancement components install only when requested.",
         "input_schema": {
             "type": "object",
             "properties": {
@@ -49,6 +49,8 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "skip_ffmpeg": {"type": "boolean", "default": False},
                 "with_voice_separation": {"type": "boolean", "default": False, "description": "Also install optional demucs and soundfile for local voice separation/background preservation."},
                 "skip_voice_separation": {"type": "boolean", "default": False},
+                "with_enhancement": {"type": "boolean", "default": False, "description": "Also configure the optional local waifu2x image/video enhancement component."},
+                "skip_enhancement": {"type": "boolean", "default": False},
             },
         },
         "output_schema": {"type": "object"},
@@ -211,6 +213,36 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "watermark_image_width": {"type": "integer"},
                 "watermark_image_opacity": {"type": "number"},
                 "watermark_image_margin": {"type": "integer"},
+            },
+        },
+        "output_schema": {"type": "object"},
+    },
+    "enhance_image": {
+        "description": "Enhance a local PNG, JPEG, WebP, HEIC, or GIF image with the CinLink waifu2x component and return a lossless PNG. Local-only; no API key or upload is required.",
+        "input_schema": {
+            "type": "object",
+            "required": ["image_path"],
+            "properties": {
+                "image_path": {"type": "string"},
+                "out": {"type": "string"},
+                "scale": {"type": "integer", "enum": [2], "default": 2},
+                "noise_level": {"type": "integer", "enum": [-1, 0, 1, 2, 3], "default": 1},
+                "model": {"type": "string", "enum": ["photo", "cunet", "anime"], "default": "photo"},
+            },
+        },
+        "output_schema": {"type": "object"},
+    },
+    "enhance_video": {
+        "description": "Enhance a local video frame by frame with the CinLink waifu2x component, preserve its original audio, and return an MP4. Local-only; no API key or upload is required.",
+        "input_schema": {
+            "type": "object",
+            "required": ["video_path"],
+            "properties": {
+                "video_path": {"type": "string"},
+                "out": {"type": "string"},
+                "scale": {"type": "integer", "enum": [2], "default": 2},
+                "noise_level": {"type": "integer", "enum": [-1, 0, 1, 2, 3], "default": 1},
+                "model": {"type": "string", "enum": ["photo", "cunet", "anime"], "default": "photo"},
             },
         },
         "output_schema": {"type": "object"},
@@ -612,7 +644,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                         "properties": {
                             "path": {"type": "string"},
                             "name": {"type": "string"},
-                            "kind": {"type": "string", "enum": ["video", "audio", "subtitle", "image", "document", "other"]},
+                            "kind": {"type": "string", "enum": ["video", "audio", "subtitle", "image", "document", "edit_plan", "other"]},
                             "id": {"type": "string"},
                             "entity_id": {"type": "string"},
                             "local_asset_id": {"type": "string"},
@@ -643,7 +675,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "task_parameters": {
                     "type": "object",
                     "additionalProperties": {"type": "string"},
-                    "description": "Explicit app slot values such as target_language=en, translation_mode=subtitle|voice, output_delivery=subtitle_file|burned_video, source_language=auto, subtitle_language=en, analysis_scope=camera, or target_duration_sec=30. Free-form translation should resolve translation_mode first, then output_delivery for subtitle mode; do not silently choose either from a model default.",
+                    "description": "Explicit app slot values such as target_language=en, translation_mode=subtitle|voice, output_delivery=subtitle_file|burned_video, source_language=auto, subtitle_language=en, analysis_scope=camera, target_duration_sec=30, require_audio=true, or watermark style/position values. Free-form translation should resolve translation_mode and subtitle delivery without silently choosing model defaults.",
                 },
                 "conversation_state": {
                     "type": "object",
@@ -669,7 +701,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "intermediate_artifacts": {"type": "array"},
                 "clarifications": {
                     "type": "array",
-                    "description": "Structured questions returned when status is requires_user_input. Present these to the user and continue with agent_clarify. Subtitle translation can require translation_mode followed by output_delivery.",
+                    "description": "Structured questions returned when status is requires_user_input. Present all questions, collect all answers, then continue once with agent_clarify.",
                 },
                 "workflow_decision": {
                     "type": "object",
@@ -703,7 +735,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         },
     },
     "agent_clarify": {
-        "description": "Answer one structured clarification from a CinLink Agent run and continue the same task. The tool preserves the prior task frame, conversation, context artifacts, language, and selected slot value. A subtitle translation answer may return a second output_delivery clarification before execution.",
+        "description": "Answer all structured clarifications from a CinLink Agent run and continue the same task once. The tool preserves the prior workflow, task frame, conversation, context artifacts, language, and resolved slot values.",
         "input_schema": {
             "type": "object",
             "required": ["run_id"],
@@ -714,7 +746,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 },
                 "clarification_id": {
                     "type": "string",
-                    "description": "Required when the run exposes multiple clarifications; optional when exactly one is present.",
+                    "description": "Single-question compatibility form. For multiple clarifications, use answers with the complete answer set.",
                 },
                 "value": {
                     "type": "string",
@@ -723,6 +755,11 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "answer": {
                     "type": "string",
                     "description": "Free-form answer for a text clarification. It may also contain an option value or label.",
+                },
+                "answers": {
+                    "type": "object",
+                    "additionalProperties": {"type": "string"},
+                    "description": "All answers keyed by clarification id or slot_key. Required as a complete set when the run exposes multiple unresolved clarifications. target_duration_sec accepts 10-600 seconds, MM:SS, HH:MM:SS, or localized duration units.",
                 },
                 "client_request_id": {
                     "type": "string",
@@ -743,6 +780,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "run_id": {"type": "string"},
                 "continued_from_run_id": {"type": "string"},
                 "answered_clarification": {"type": "object"},
+                "answered_clarifications": {"type": "array"},
                 "status": {"type": "string"},
                 "clarifications": {"type": "array"},
                 "primary_artifacts": {"type": "array"},

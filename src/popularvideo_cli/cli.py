@@ -19,6 +19,7 @@ from .dependencies import local_dependency_report, require_local_voice_separatio
 from .deconstruction import deconstruct_video, regenerate_deconstruction
 from .editor_exports import export_audio, export_editor_project, export_video
 from .errors import CliError
+from .enhancement import enhance_image, enhance_video
 from .local_setup import setup_local_dependencies
 from .local_tools import (
     apply_watermark,
@@ -60,6 +61,8 @@ def build_parser() -> argparse.ArgumentParser:
     setup_deps.add_argument("--skip-ffmpeg", action="store_true")
     setup_deps.add_argument("--with-voice-separation", action="store_true", help="Also install optional Demucs/soundfile voice-separation dependencies.")
     setup_deps.add_argument("--skip-voice-separation", action="store_true")
+    setup_deps.add_argument("--with-enhancement", action="store_true", help="Also configure the optional local waifu2x image/video enhancement component.")
+    setup_deps.add_argument("--skip-enhancement", action="store_true")
 
     tools = subparsers.add_parser("tools")
     tool_subparsers = tools.add_subparsers(dest="tools_command", required=True)
@@ -177,6 +180,20 @@ def build_parser() -> argparse.ArgumentParser:
     watermark.add_argument("--watermark-image-width", type=int)
     watermark.add_argument("--watermark-image-opacity", type=float)
     watermark.add_argument("--watermark-image-margin", type=int)
+
+    enhance_image_parser = subparsers.add_parser("enhance-image")
+    enhance_image_parser.add_argument("image_path")
+    enhance_image_parser.add_argument("--out")
+    enhance_image_parser.add_argument("--scale", type=int, choices=[2], default=2)
+    enhance_image_parser.add_argument("--noise-level", type=int, choices=[-1, 0, 1, 2, 3], default=1)
+    enhance_image_parser.add_argument("--model", choices=["photo", "cunet", "anime"], default="photo")
+
+    enhance_video_parser = subparsers.add_parser("enhance-video")
+    enhance_video_parser.add_argument("video_path")
+    enhance_video_parser.add_argument("--out")
+    enhance_video_parser.add_argument("--scale", type=int, choices=[2], default=2)
+    enhance_video_parser.add_argument("--noise-level", type=int, choices=[-1, 0, 1, 2, 3], default=1)
+    enhance_video_parser.add_argument("--model", choices=["photo", "cunet", "anime"], default="photo")
 
     trim = subparsers.add_parser("trim-video")
     trim.add_argument("video_path")
@@ -380,6 +397,14 @@ def build_parser() -> argparse.ArgumentParser:
     clarify.add_argument("--clarification-id")
     clarify.add_argument("--value")
     clarify.add_argument("--answer")
+    clarify.add_argument(
+        "--response",
+        action="append",
+        default=[],
+        metavar="ID_OR_SLOT=VALUE",
+        help="Answer every clarification in one continuation. Repeat for multiple questions.",
+    )
+    clarify.add_argument("--answers-json", default="{}")
     clarify.add_argument("--client-request-id")
     clarify.add_argument("--wait", action="store_true")
     clarify.add_argument(
@@ -404,6 +429,11 @@ def build_parser() -> argparse.ArgumentParser:
     report.add_argument("--artifact-path", action="append", default=[])
     report.add_argument("--artifact-json", action="append", default=[], help="JSON artifact object or array.")
     report.add_argument("--artifact-metadata-json", default="{}")
+    report.add_argument(
+        "--upload-for-cloud-model-input",
+        action="store_true",
+        help="Upload non-video artifacts to the account-scoped Agent file endpoint before reporting them.",
+    )
     report.add_argument("--metadata-json", default="{}")
     report.add_argument("--error-code")
     report.add_argument("--error-message")
@@ -471,6 +501,8 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             skip_ffmpeg=args.skip_ffmpeg,
             with_voice_separation=args.with_voice_separation,
             skip_voice_separation=args.skip_voice_separation,
+            with_enhancement=args.with_enhancement,
+            skip_enhancement=args.skip_enhancement,
             interactive=not bool(getattr(args, "_json_output", False)),
         )
 
@@ -506,6 +538,8 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
         "export-audio",
         "export-editor-project",
         "export-video",
+        "enhance-image",
+        "enhance-video",
         "mix-dubbed-audio",
         "montage",
         "trim-video",
@@ -599,6 +633,22 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             watermark_image_width=render["watermark_image_width"],
             watermark_image_opacity=render["watermark_image_opacity"],
             watermark_image_margin=render["watermark_image_margin"],
+        )
+    if args.command == "enhance-image":
+        return enhance_image(
+            Path(args.image_path),
+            out=_path_or_none(args.out),
+            scale=args.scale,
+            noise_level=args.noise_level,
+            model=args.model,
+        )
+    if args.command == "enhance-video":
+        return enhance_video(
+            Path(args.video_path),
+            out=_path_or_none(args.out),
+            scale=args.scale,
+            noise_level=args.noise_level,
+            model=args.model,
         )
     if args.command == "trim-video":
         return trim_video(
@@ -751,11 +801,14 @@ def run_agent_command(args: argparse.Namespace, client: RuntimeClient) -> dict[s
             )
         return created
     if args.agent_command == "clarify":
+        answers = _parse_string_dict(args.answers_json, "--answers-json")
+        answers.update(_parse_key_value_pairs(args.response, "--response"))
         return client.continue_agent_clarification(
             args.run_id,
             clarification_id=args.clarification_id,
             value=args.value,
             answer=args.answer,
+            answers=answers,
             client_request_id=args.client_request_id,
             wait=args.wait,
             include_events=args.include_events,
@@ -778,10 +831,22 @@ def run_agent_command(args: argparse.Namespace, client: RuntimeClient) -> dict[s
             if key in metadata and key not in artifact_metadata:
                 artifact_metadata[key] = metadata[key]
         artifacts = [
-            artifact_ref_from_path(Path(item), metadata=artifact_metadata)
+            (
+                client.upload_agent_artifact(Path(item), metadata=artifact_metadata)
+                if args.upload_for_cloud_model_input
+                else artifact_ref_from_path(Path(item), metadata=artifact_metadata)
+            )
             for item in args.artifact_path
         ]
         artifacts.extend(_parse_report_artifacts(args.artifact_json, artifact_metadata))
+        if args.upload_for_cloud_model_input:
+            artifacts = [
+                _upload_report_artifact(client, artifact)
+                if not str((artifact.get("metadata") or {}).get("cloud_accessible") or "").lower() == "true"
+                else artifact
+                for artifact in artifacts
+            ]
+            metadata.update({"cloud_accessible": "true", "agent_server_input": "true"})
         result = {
             "tool_call_id": args.tool_call_id,
             "status": args.status,
@@ -792,6 +857,24 @@ def run_agent_command(args: argparse.Namespace, client: RuntimeClient) -> dict[s
         }
         return client.report_local_tool_result(args.run_id, result)
     raise CliError("invalid_input", f"Unsupported agent command: {args.agent_command}")
+
+
+def _upload_report_artifact(
+    client: RuntimeClient,
+    artifact: dict[str, Any],
+) -> dict[str, Any]:
+    path = artifact.get("path") or artifact.get("local_path")
+    if not path:
+        raise CliError(
+            "invalid_input",
+            "--upload-for-cloud-model-input requires a local path for every non-uploaded artifact.",
+        )
+    metadata = artifact.get("metadata")
+    return client.upload_agent_artifact(
+        Path(str(path)),
+        kind=str(artifact.get("kind") or "").strip() or None,
+        metadata=metadata if isinstance(metadata, dict) else None,
+    )
 
 
 def _path_or_none(value: str | None) -> Path | None:

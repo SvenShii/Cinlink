@@ -15,6 +15,9 @@ from popularvideo_cli.client import (
 from popularvideo_cli.cli import build_parser, run_agent_command
 from popularvideo_cli.config import Settings, load_settings, render_options, update_brand_kit
 from popularvideo_cli.local_tools import _clean_cut_removals, _inverse_ranges
+from popularvideo_cli.local_setup import setup_local_dependencies
+from popularvideo_cli.enhancement import enhance_image
+from popularvideo_cli.schemas import TOOL_SCHEMAS
 from popularvideo_cli.workflows import _first_subtitle_artifact
 
 
@@ -162,6 +165,47 @@ class AgentContractTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in payload["supporting_artifacts"]], ["subtitle-1"])
         self.assertEqual([item["id"] for item in payload["intermediate_artifacts"]], ["audio-1"])
 
+    def test_local_tool_report_can_stage_non_video_for_cloud_model(self) -> None:
+        class ReportClient:
+            def upload_agent_artifact(self, path, kind=None, metadata=None):
+                return {
+                    "name": path.name,
+                    "kind": kind or "audio",
+                    "path": str(path),
+                    "url": "https://cdn.example.test/source.m4a",
+                    "cloud_file_id": "cloud-audio-1",
+                    "metadata": {
+                        **(metadata or {}),
+                        "cloud_accessible": "true",
+                        "agent_server_input": "true",
+                    },
+                }
+
+            def report_local_tool_result(self, run_id, result):
+                return result
+
+        with tempfile.TemporaryDirectory() as temp_dir:
+            audio = Path(temp_dir) / "source.m4a"
+            audio.write_bytes(b"audio")
+            args = build_parser().parse_args(
+                [
+                    "agent",
+                    "report-tool-result",
+                    "run-1",
+                    "--tool-call-id",
+                    "stage-audio-1",
+                    "--status",
+                    "done",
+                    "--artifact-path",
+                    str(audio),
+                    "--upload-for-cloud-model-input",
+                ]
+            )
+            result = run_agent_command(args, ReportClient())
+
+        self.assertEqual(result["artifacts"][0]["cloud_file_id"], "cloud-audio-1")
+        self.assertEqual(result["output_metadata"]["agent_server_input"], "true")
+
     def test_agent_sse_parser_preserves_cursor_and_public_event_type(self) -> None:
         events = list(
             _iter_sse_events(
@@ -247,6 +291,60 @@ class AgentContractTests(unittest.TestCase):
 
 
 class BrandKitAndEditingTests(unittest.TestCase):
+    def test_dependency_setup_surfaces_enhancement_configuration(self) -> None:
+        report = {
+            "ffmpeg": {"subtitle_burn_available": True, "path": "/ffmpeg"},
+            "ffprobe": {"available": True},
+            "local_voice_separation": {"available": True},
+            "local_media_enhancement": {"available": False},
+            "waifu2x": {"path": None},
+        }
+        with mock.patch(
+            "popularvideo_cli.local_setup.local_dependency_report",
+            return_value=report,
+        ):
+            result = setup_local_dependencies(
+                dry_run=True,
+                with_enhancement=True,
+                interactive=False,
+            )
+
+        enhancement = next(
+            item for item in result["actions"] if item["component"] == "media_enhancement"
+        )
+        self.assertEqual(enhancement["status"], "would_configure")
+        self.assertIn("CINLINK_WAIFU2X_DIR", enhancement["message"])
+
+    def test_image_enhancement_returns_typed_local_artifact(self) -> None:
+        png_header = b"\x89PNG\r\n\x1a\n" + b"\x00\x00\x00\rIHDR" + (64).to_bytes(4, "big") + (48).to_bytes(4, "big")
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            binary_root = root / "waifu2x"
+            binary_root.mkdir()
+            binary = binary_root / "waifu2x-ncnn-vulkan"
+            binary.write_text("binary", encoding="utf-8")
+            binary.chmod(0o755)
+            (binary_root / "models-upconv_7_photo").mkdir()
+            source = root / "source.png"
+            source.write_bytes(png_header)
+
+            def fake_run(command, message):
+                output = Path(command[command.index("-o") + 1])
+                output.write_bytes(png_header)
+                return mock.Mock(stdout="", stderr="", returncode=0)
+
+            with mock.patch(
+                "popularvideo_cli.enhancement.resolve_waifu2x",
+                return_value=binary,
+            ), mock.patch("popularvideo_cli.enhancement._run", side_effect=fake_run):
+                result = enhance_image(source, out=root / "out")
+
+        self.assertEqual(result["width"], 64)
+        self.assertEqual(result["height"], 48)
+        self.assertEqual(result["artifacts"][0]["metadata"]["artifact_role"], "enhanced_image")
+        self.assertIn("enhance_image", TOOL_SCHEMAS)
+        self.assertIn("enhance_video", TOOL_SCHEMAS)
+
     def test_brand_kit_persists_and_applies_with_explicit_override(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
             config_path = Path(temp_dir) / "config.json"

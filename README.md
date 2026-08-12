@@ -18,7 +18,7 @@ Paste this into Claude Code, Codex, Hermes, OpenClaw, or any agent with shell ac
 
 ```text
 Set up https://github.com/SvenShii/Cinlink for me.
-Read install.md first to install the CinLink CLI, register the skills with whichever agent you're running under, run setup-local-deps so ffmpeg and optional local voice-separation dependencies are handled, and set up my CinLink API key — ask me to paste it when you need it. Save the key with `cinlink --json onboarding --api-key <key>` and never print it back. After install, don't run hosted transcription, dubbing, image, or video generation on your own — just run cheap checks like `cinlink --json doctor` and `cinlink --json tools list`, tell me it's ready, and wait for my first media task.
+Read install.md first to install the CinLink CLI, register the skills with whichever agent you're running under, run setup-local-deps so ffmpeg and optional voice-separation/enhancement components are handled, and set up my CinLink API key — ask me to paste it when you need it. Save the key with `cinlink --json onboarding --api-key <key>` and never print it back. After install, don't run hosted transcription, dubbing, image, or video generation on your own — just run cheap checks like `cinlink --json doctor` and `cinlink --json tools list`, tell me it's ready, and wait for my first media task.
 ```
 
 The agent handles the clone, CLI install, local dependency prompt, skill registration, and one-time CinLink API key onboarding.
@@ -39,7 +39,7 @@ During install, the agent should also run:
 cinlink setup-local-deps
 ```
 
-This prompts the user to install local `ffmpeg`/`ffprobe` for subtitle burn-in, local audio extraction/mixing, Clean Cut, trimming, montage, watermarking, video deconstruction/assembly, media export, editor project handoff, and local media inspection. It also offers optional `demucs` and `soundfile` for local voice separation/background preservation.
+This prompts the user to install local `ffmpeg`/`ffprobe` for media processing. It also offers optional `demucs`/`soundfile` for voice separation and checks the verified waifu2x binary plus photo/cunet/anime model directories for local image/video enhancement.
 
 Try prompts like:
 
@@ -133,6 +133,8 @@ cinlink --json trim-video "D:\videos\demo.mp4" --start 12.4 --end 18.8
 cinlink --json montage --clips-json "[{\"path\":\"D:\\videos\\demo.mp4\",\"start_sec\":0,\"end_sec\":4},{\"path\":\"D:\\videos\\demo.mp4\",\"start_sec\":8,\"end_sec\":12}]"
 cinlink --json brand-kit set --enable --font-name Arial --watermark-image "D:\brand\logo.png"
 cinlink --json apply-watermark "D:\videos\demo.mp4"
+cinlink --json enhance-image "D:\images\demo.png" --model photo
+cinlink --json enhance-video "D:\videos\demo.mp4" --model photo
 cinlink --json mix-dubbed-audio "D:\videos\demo.mp4" --dubbed-audio "D:\videos\dubbed.wav"
 cinlink --json summarize "D:\videos\demo.mp4"
 cinlink --json shorten "D:\videos\demo.mp4" --target-duration 45
@@ -148,14 +150,16 @@ cinlink --json export-editor-project "D:\videos\demo.mp4" --target premiere --su
 cinlink --json agent run "Summarize this video into five selling points" --context-file "D:\videos\demo.mp4" --app-language en
 cinlink --json agent run "Add English subtitles and return the subtitled video" --context-file "D:\videos\demo.mp4" --client-request-id request_123 --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait --include-events
 cinlink --json agent poll run_xxx
-cinlink --json agent clarify run_xxx --clarification-id translation_mode:0 --value voice --wait
+cinlink --json agent clarify run_xxx --response translation_mode=subtitle --response output_delivery=burned_video --wait
 cinlink --json agent events run_xxx
 cinlink --json agent local-tools run_xxx
 ```
 
 The current hosted runtime keeps full user videos off the server for transcription, media translation, summarization, shortening, dubbing, and visual deconstruction. Audio workflows upload only locally extracted audio; shortening first registers that audio as an account-scoped Agent file and submits its `cloud_file_id`, with multipart fallback for older runtimes. Deconstruction uploads only sampled frames. Image generation accepts up to three local/remote references; video generation accepts up to nine image references. Local images are uploaded through the authenticated reference-image endpoint. `cinlink dub` auto-discovers sibling `source.reference.srt`, `subtitle.reference.srt`, or `source.srt` when `--reference-subtitle` is omitted, and supports repeated `--reference-audio speaker_id=path` values.
 
-When an Agent result has `status=requires_user_input` and a non-empty `clarifications` array, show its question/options to the user and continue with `agent clarify`. Free-form media translation resolves subtitles versus dubbing first; subtitle mode can then ask for subtitle-file versus burned-video delivery. Inspect `workflow_decision.slot_provenance` and never execute `translation_mode` or `output_delivery` from `model_default` or `unknown`. The command preserves the original task frame, context files, and compound execution plan. Do not use it for install/authorization prompts that have no structured clarification.
+When an Agent result has `status=requires_user_input` and a non-empty `clarifications` array, show every question/options to the user, collect every answer, then continue once with repeated `--response` or `--answers-json`. Free-form media translation resolves subtitles versus dubbing and subtitle delivery without accepting model defaults. Custom `target_duration_sec` answers accept 10-600 seconds and common duration formats. The command preserves the original workflow, task frame, context files, and compound execution plan. Do not use it for install/authorization prompts that have no structured clarification.
+
+Local Agent `stage_audio` and other non-video outputs explicitly requested as cloud-model input must be reported with `--upload-for-cloud-model-input`; this uses the authenticated account-scoped Agent file endpoint. Full source videos remain local. Preserve ordered `input_collections` and `kind=edit_plan` artifacts instead of flattening or replanning them.
 
 Local files passed with `--context-file` are tagged as the current submission and receive highest input priority over stale conversation artifacts. For a currently selected `--context-json` artifact, set `metadata.selection_scope=current_submission` and `metadata.input_priority=highest`; historical descriptors are not elevated automatically. If an explicitly selected generation reference cannot be resolved, ask for that artifact again instead of substituting another image.
 

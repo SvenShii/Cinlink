@@ -20,6 +20,8 @@ def main() -> int:
             "dub",
             "burn",
             "apply_watermark",
+            "enhance_image",
+            "enhance_video",
             "trim_video",
             "montage",
             "clean_cut",
@@ -77,6 +79,10 @@ def build_command(tool: str, args: dict) -> list[str]:
             command.append("--with-voice-separation")
         if args.get("skip_voice_separation"):
             command.append("--skip-voice-separation")
+        if args.get("with_enhancement"):
+            command.append("--with-enhancement")
+        if args.get("skip_enhancement"):
+            command.append("--skip-enhancement")
         return command
     if tool == "transcribe":
         return base + ["transcribe", args["input_path"], "--lang", args.get("lang", "auto"), *optional("--out", args.get("out")), *optional("--timeout", args.get("timeout"))]
@@ -184,6 +190,30 @@ def build_command(tool: str, args: dict) -> list[str]:
         if args.get("no_brand_kit"):
             command.append("--no-brand-kit")
         return command
+    if tool == "enhance_image":
+        return base + [
+            "enhance-image",
+            args["image_path"],
+            "--scale",
+            str(args.get("scale", 2)),
+            "--noise-level",
+            str(args.get("noise_level", 1)),
+            "--model",
+            args.get("model", "photo"),
+            *optional("--out", args.get("out")),
+        ]
+    if tool == "enhance_video":
+        return base + [
+            "enhance-video",
+            args["video_path"],
+            "--scale",
+            str(args.get("scale", 2)),
+            "--noise-level",
+            str(args.get("noise_level", 1)),
+            "--model",
+            args.get("model", "photo"),
+            *optional("--out", args.get("out")),
+        ]
     if tool == "trim_video":
         return base + [
             "trim-video",
@@ -403,6 +433,8 @@ def build_command(tool: str, args: dict) -> list[str]:
         command.extend(optional("--clarification-id", args.get("clarification_id")))
         command.extend(optional("--value", args.get("value")))
         command.extend(optional("--answer", args.get("answer")))
+        if args.get("answers"):
+            command.extend(["--answers-json", json.dumps(args["answers"], ensure_ascii=False)])
         command.extend(optional("--client-request-id", args.get("client_request_id")))
         if args.get("wait"):
             command.append("--wait")

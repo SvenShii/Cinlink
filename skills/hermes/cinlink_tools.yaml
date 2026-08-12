@@ -18,6 +18,8 @@ tools:
       skip_ffmpeg: boolean
       with_voice_separation: boolean
       skip_voice_separation: boolean
+      with_enhancement: boolean
+      skip_enhancement: boolean
   - name: cinlink_agent_run
     command: cinlink --json agent run "{prompt}"
     args_schema:
@@ -41,6 +43,7 @@ tools:
       clarification_id: string
       value: string
       answer: string
+      answers: object
       client_request_id: string
       wait: boolean
       include_events: boolean
@@ -128,6 +131,22 @@ tools:
       watermark_image_width: integer
       watermark_image_opacity: number
       watermark_image_margin: integer
+  - name: cinlink_enhance_image
+    command: cinlink --json enhance-image "{image_path}"
+    args_schema:
+      image_path: string
+      out: string
+      scale: integer
+      noise_level: integer
+      model: string
+  - name: cinlink_enhance_video
+    command: cinlink --json enhance-video "{video_path}"
+    args_schema:
+      video_path: string
+      out: string
+      scale: integer
+      noise_level: integer
+      model: string
   - name: cinlink_trim_video
     command: cinlink --json trim-video "{video_path}" --start "{start_sec}" --end "{end_sec}"
     args_schema:

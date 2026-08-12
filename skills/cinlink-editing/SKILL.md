@@ -1,11 +1,29 @@
 ---
 name: cinlink-editing
-description: CinLink local video editing and export workflows for agents. Use to remove long pauses, trim or montage clips, apply watermarks/Brand Kits, export video or audio formats, and create CapCut, Premiere Pro, Final Cut Pro, or DaVinci Resolve handoff projects. These workflows are local-only and require ffmpeg/ffprobe, but do not require a CinLink API key.
+description: CinLink local media enhancement, video editing, and export workflows for agents. Use to enhance images/videos, remove long pauses, trim or montage clips, apply watermarks/Brand Kits, export media, and create editor handoff projects. These workflows are local-only and do not require a CinLink API key.
 ---
 
 # CinLink Editing
 
 Use this for local edits that do not need a hosted model. Read `/cinlink-cli` first when local dependency status is unknown.
+
+## Image And Video Enhancement
+
+Enhance a local image to a lossless PNG:
+
+```bash
+cinlink --json enhance-image /absolute/image.png --model photo --out /absolute/out
+```
+
+Supported image inputs are PNG, JPEG, WebP, HEIC, and GIF. HEIC and GIF use the first frame. Models are `photo`, `cunet`, and `anime`; scale is currently `2`, and noise level may be `-1`, `0`, `1`, `2`, or `3`.
+
+Enhance a local video frame by frame while preserving its original audio:
+
+```bash
+cinlink --json enhance-video /absolute/video.mp4 --model photo --out /absolute/out
+```
+
+Both commands require the verified local `waifu2x-ncnn-vulkan` component and model directories. Video enhancement also requires `ffmpeg`/`ffprobe` and may use substantial time and disk space. Run `cinlink --json doctor`; if unavailable, ask before running `cinlink setup-local-deps --with-enhancement` or direct the user to install the CinLink app-managed enhancement bundle.
 
 ## Clean Cut
 
@@ -133,7 +151,7 @@ CinLink creates handoff assets but does not launch or control desktop editor app
 ## Rules
 
 - These tools are local-only: no CinLink API key or hosted upload is required.
-- Local `ffmpeg` and `ffprobe` are required. Run `cinlink --json doctor` and ask before installing missing dependencies.
+- Local `ffmpeg` and `ffprobe` are required for video work. Enhancement additionally requires the local waifu2x model bundle. Run `cinlink --json doctor` and ask before installing missing dependencies.
 - Return the typed artifact metadata and privacy receipt. The source video should report `stayed_local` and hosted inputs should be empty.
 - For editor handoff, present `primary_artifacts` as the project file/package manifest and `supporting_artifacts` as optional media, audio, or subtitle companions.
 - Use `/cinlink-subtitles` when the task also needs transcription or translation.

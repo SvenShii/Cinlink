@@ -28,6 +28,8 @@ VOICE_SEPARATION_KEYWORDS = (
 
 
 def local_dependency_report() -> dict[str, Any]:
+    from .enhancement import waifu2x_dependency_report
+
     ffmpeg_path = resolve_ffmpeg(require_subtitles=False)
     ffprobe_path = resolve_ffprobe(ffmpeg_path)
     subtitle_ffmpeg_path = resolve_ffmpeg(require_subtitles=True)
@@ -35,6 +37,7 @@ def local_dependency_report() -> dict[str, Any]:
     demucs_available = importlib.util.find_spec("demucs") is not None
     soundfile_available = importlib.util.find_spec("soundfile") is not None
     voice_ready = bool(ffmpeg_path and demucs_available and soundfile_available)
+    waifu2x = waifu2x_dependency_report()
     return {
         "policy": {
             "hosted_first": True,
@@ -62,6 +65,8 @@ def local_dependency_report() -> dict[str, Any]:
                 "regeneration_assembly",
                 "video_audio_export",
                 "editor_project_export",
+                "local_image_enhancement",
+                "local_video_enhancement",
                 "local_voice_separation",
             ],
             "install_hint": {
@@ -81,6 +86,7 @@ def local_dependency_report() -> dict[str, Any]:
                 "clean_cut",
                 "video_deconstruction",
                 "editor_project_export",
+                "local_video_enhancement",
             ],
             "install_hint": "ffprobe is normally installed with ffmpeg.",
         },
@@ -93,6 +99,16 @@ def local_dependency_report() -> dict[str, Any]:
             "available": soundfile_available,
             "used_for": ["local_voice_separation", "preserve_background_music"],
             "install_hint": "pip install soundfile",
+        },
+        "waifu2x": waifu2x,
+        "local_media_enhancement": {
+            "available": bool(waifu2x["available"] and ffmpeg_path and ffprobe_path),
+            "requires": ["waifu2x", "ffmpeg", "ffprobe"],
+            "message": (
+                "Local image/video enhancement is ready."
+                if waifu2x["available"] and ffmpeg_path and ffprobe_path
+                else "Image/video enhancement needs the local waifu2x model bundle plus ffmpeg and ffprobe."
+            ),
         },
         "local_voice_separation": {
             "available": voice_ready,
@@ -114,6 +130,7 @@ def default_client_capabilities_from_dependencies() -> dict[str, bool]:
     editing_available = ffmpeg_available and ffprobe_available
     subtitle_burn_available = bool(report["ffmpeg"].get("subtitle_burn_available"))
     voice_separation_available = bool(report["local_voice_separation"]["available"])
+    enhancement_available = bool(report["local_media_enhancement"]["available"])
     return {
         "can_search_analyzed_videos": False,
         "can_search_local_files": False,
@@ -130,7 +147,7 @@ def default_client_capabilities_from_dependencies() -> dict[str, bool]:
         "can_render_video_locally": editing_available,
         "split_dub_pipeline_v1": ffmpeg_available,
         "trusted_fixed_workflow_routing": False,
-        "can_enhance_video_locally": False,
+        "can_enhance_video_locally": enhancement_available,
         "can_separate_vocals_locally": voice_separation_available,
         "can_preserve_background_music_locally": voice_separation_available,
         "can_clean_cut_locally": editing_available,

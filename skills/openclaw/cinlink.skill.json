@@ -18,7 +18,7 @@
     },
     {
       "name": "cinlink_setup_local_deps",
-      "description": "Prompt for or install CinLink local dependencies such as ffmpeg and optional Demucs/soundfile.",
+      "description": "Prompt for or install CinLink local dependencies such as ffmpeg and optional voice-separation/enhancement components.",
       "tool_arg": "setup_local_deps"
     },
     {
@@ -28,7 +28,7 @@
     },
     {
       "name": "cinlink_agent_clarify",
-      "description": "Answer one structured clarification and continue the same task; subtitle translation may ask output delivery next.",
+      "description": "Collect all structured clarification answers and continue the original workflow once.",
       "tool_arg": "agent_clarify"
     },
     {
@@ -65,6 +65,16 @@
       "name": "cinlink_apply_watermark",
       "description": "Apply a saved Brand Kit or one-off text/image watermark to a local video.",
       "tool_arg": "apply_watermark"
+    },
+    {
+      "name": "cinlink_enhance_image",
+      "description": "Enhance a local image to a lossless PNG with the CinLink waifu2x component.",
+      "tool_arg": "enhance_image"
+    },
+    {
+      "name": "cinlink_enhance_video",
+      "description": "Enhance a local video frame by frame while preserving its audio.",
+      "tool_arg": "enhance_video"
     },
     {
       "name": "cinlink_trim_video",

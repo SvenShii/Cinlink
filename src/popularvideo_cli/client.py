@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from contextlib import ExitStack
 import json
+import math
 from pathlib import Path
 import re
 import subprocess
@@ -397,33 +398,25 @@ class RuntimeClient:
         clarification_id: str | None = None,
         value: str | None = None,
         answer: str | None = None,
+        answers: dict[str, str] | None = None,
         client_request_id: str | None = None,
         wait: bool = False,
         include_events: bool = False,
         timeout: float | None = None,
     ) -> dict[str, Any]:
         previous = self.get_agent_run(run_id)
-        clarifications = [
+        clarifications = _unique_agent_clarifications([
             item
             for item in previous.get("clarifications") or []
             if isinstance(item, dict)
-        ]
-        clarification = _select_agent_clarification(
+        ])
+        resolved = _resolve_agent_clarifications(
             clarifications,
             clarification_id=clarification_id,
-        )
-        selected_value, prompt = _resolve_agent_clarification_answer(
-            clarification,
             value=value,
             answer=answer,
+            answers=answers,
         )
-        slot_key = str(clarification.get("slot_key") or "").strip()
-        if not slot_key:
-            raise CliError(
-                "invalid_agent_clarification",
-                "The selected CinLink clarification does not include a slot_key.",
-                {"run_id": run_id, "clarification_id": clarification.get("id")},
-            )
 
         previous_conversation_state = previous.get("conversation_state")
         previous_conversation_state = (
@@ -451,15 +444,34 @@ class RuntimeClient:
         context_descriptors = _continuation_context_descriptors(
             previous.get("context_files")
         )
+        resolved, file_selection_parameters = _resolve_agent_file_clarifications(
+            resolved,
+            context_descriptors,
+        )
+        task_parameters = {
+            str(item["clarification"]["slot_key"]).strip(): item["value"]
+            for item in resolved
+        }
+        task_parameters.update(file_selection_parameters)
+        app_language = str(previous.get("app_language") or "").strip()
+        if app_language:
+            task_parameters["__clarification_reply_language"] = app_language
+        prompt = "；".join(item["label"] for item in resolved)
+        workflow_ids = [
+            str(item["clarification"].get("workflow_id") or "").strip()
+            for item in resolved
+        ]
+        task_intent = next((item for item in workflow_ids if item), None)
         created = self.create_agent_run(
             prompt,
             conversation_id=str(previous.get("conversation_id") or "") or None,
             context_descriptors=context_descriptors,
             mode=str(previous.get("mode") or "execute"),
-            task_parameters={slot_key: selected_value},
+            task_intent=task_intent,
+            task_parameters=task_parameters,
             conversation_state=conversation_state,
             client_request_id=client_request_id,
-            app_language=str(previous.get("app_language") or "") or None,
+            app_language=app_language or None,
         )
         if wait and created.get("run_id"):
             result = self.wait_for_agent_run(
@@ -469,16 +481,70 @@ class RuntimeClient:
             )
         else:
             result = created
+        answered_clarifications = [
+            {
+                "id": item["clarification"].get("id"),
+                "slot_key": item["clarification"].get("slot_key"),
+                "value": item["value"],
+                "label": item["label"],
+            }
+            for item in resolved
+        ]
         return {
             **result,
             "continued_from_run_id": run_id,
-            "answered_clarification": {
-                "id": clarification.get("id"),
-                "slot_key": slot_key,
-                "value": selected_value,
-                "label": prompt,
-            },
+            "answered_clarifications": answered_clarifications,
+            "answered_clarification": answered_clarifications[0] if len(answered_clarifications) == 1 else None,
         }
+
+    def upload_agent_artifact(
+        self,
+        input_path: Path,
+        *,
+        kind: str | None = None,
+        metadata: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        checked = require_existing_file(input_path)
+        resolved_kind = kind or infer_artifact_kind(checked)
+        if resolved_kind == "video":
+            raise CliError(
+                "invalid_input",
+                "CinLink keeps source videos local. Extract audio or report another explicitly requested non-video input instead of uploading a video.",
+                {"path": str(checked)},
+            )
+        uploaded = self._upload_agent_file(checked, kind=resolved_kind)
+        uploaded_artifact = uploaded.get("artifact")
+        artifact = dict(uploaded_artifact) if isinstance(uploaded_artifact, dict) else {}
+        artifact_metadata = artifact.get("metadata")
+        artifact_metadata = dict(artifact_metadata) if isinstance(artifact_metadata, dict) else {}
+        artifact_metadata.update(
+            {
+                str(key): str(item)
+                for key, item in (metadata or {}).items()
+                if item is not None
+            }
+        )
+        artifact_metadata.update(
+            {
+                "local_path": str(checked),
+                "cloud_accessible": "true",
+                "agent_server_input": "true",
+            }
+        )
+        cloud_file_id = _agent_upload_cloud_file_id(uploaded)
+        if cloud_file_id:
+            artifact_metadata["cloud_file_id"] = cloud_file_id
+        artifact.update(
+            {
+                "name": str(uploaded.get("name") or artifact.get("name") or checked.name),
+                "kind": resolved_kind,
+                "path": str(checked),
+                "url": uploaded.get("url") or artifact.get("url"),
+                "cloud_file_id": cloud_file_id,
+                "metadata": artifact_metadata,
+            }
+        )
+        return artifact
 
     def stream_agent_events(
         self,
@@ -1035,6 +1101,189 @@ def _select_agent_clarification(
     )
 
 
+def _unique_agent_clarifications(
+    clarifications: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    seen: set[str] = set()
+    unique: list[dict[str, Any]] = []
+    for item in clarifications:
+        slot_key = _normalized_clarification_key(item.get("slot_key"))
+        identity = f"slot:{slot_key}" if slot_key else f"id:{str(item.get('id') or '').strip()}"
+        if identity in seen:
+            continue
+        seen.add(identity)
+        unique.append(item)
+    return unique
+
+
+def _resolve_agent_clarifications(
+    clarifications: list[dict[str, Any]],
+    *,
+    clarification_id: str | None,
+    value: str | None,
+    answer: str | None,
+    answers: dict[str, str] | None,
+) -> list[dict[str, Any]]:
+    if not clarifications:
+        _select_agent_clarification([], clarification_id=clarification_id)
+    submitted = {
+        str(key).strip(): str(item)
+        for key, item in (answers or {}).items()
+        if str(key).strip() and item is not None
+    }
+    if clarification_id or value is not None or answer is not None:
+        selected = _select_agent_clarification(
+            clarifications,
+            clarification_id=clarification_id,
+        )
+        selected_key = str(selected.get("id") or selected.get("slot_key") or "").strip()
+        submitted[selected_key] = str(answer if answer is not None else value or "")
+
+    resolved: list[dict[str, Any]] = []
+    missing: list[dict[str, Any]] = []
+    for clarification in clarifications:
+        slot_key = str(clarification.get("slot_key") or "").strip()
+        if not slot_key:
+            raise CliError(
+                "invalid_agent_clarification",
+                "A CinLink clarification does not include a slot_key.",
+                {"clarification_id": clarification.get("id")},
+            )
+        clarification_id_value = str(clarification.get("id") or "").strip()
+        raw_answer = submitted.get(clarification_id_value)
+        if raw_answer is None:
+            raw_answer = submitted.get(slot_key)
+        if raw_answer is None:
+            raw_answer = submitted.get(_normalized_clarification_key(slot_key))
+        if raw_answer is None:
+            selected_value = str(clarification.get("selected_value") or "").strip()
+            if selected_value:
+                raw_answer = selected_value
+        if raw_answer is None:
+            missing.append(
+                {
+                    "id": clarification.get("id"),
+                    "slot_key": slot_key,
+                    "question": clarification.get("question"),
+                }
+            )
+            continue
+        selected_value, label = _resolve_agent_clarification_answer(
+            clarification,
+            value=None,
+            answer=raw_answer,
+        )
+        resolved.append(
+            {"clarification": clarification, "value": selected_value, "label": label}
+        )
+    if missing:
+        raise CliError(
+            "clarification_answers_required",
+            "Answer every unresolved clarification before continuing the CinLink Agent run.",
+            {
+                "missing_clarifications": missing,
+                "hint": "Pass repeated --response ID_OR_SLOT=VALUE or --answers-json with all answers.",
+            },
+        )
+    return resolved
+
+
+def _resolve_agent_file_clarifications(
+    resolved: list[dict[str, Any]],
+    context_descriptors: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], dict[str, str]]:
+    required_kinds_by_slot = {
+        "media_id": {"video"},
+        "video_id": {"video"},
+        "video_file_id": {"video"},
+        "video_entity_id": {"video"},
+        "source_video": {"video"},
+        "source_video_id": {"video"},
+        "source_video_entity_id": {"video"},
+        "subtitle_id": {"subtitle"},
+        "subtitle_file_id": {"subtitle"},
+        "subtitle_entity_id": {"subtitle"},
+    }
+    extra_parameters: dict[str, str] = {}
+    for item in resolved:
+        clarification = item["clarification"]
+        slot_key = _normalized_clarification_key(clarification.get("slot_key"))
+        required_kinds = required_kinds_by_slot.get(slot_key)
+        if not required_kinds:
+            continue
+        response = str(item["value"]).strip()
+        normalized_response = response.strip("@\"'“”‘’ ").casefold()
+        candidates = [
+            descriptor
+            for descriptor in context_descriptors
+            if str(descriptor.get("kind") or "other") in required_kinds
+        ]
+        matches = [
+            descriptor
+            for descriptor in candidates
+            if normalized_response in _agent_context_descriptor_match_values(descriptor)
+        ]
+        if len(matches) != 1:
+            raise CliError(
+                "invalid_clarification_answer",
+                "The file clarification answer must identify exactly one matching context file.",
+                {
+                    "clarification_id": clarification.get("id"),
+                    "slot_key": clarification.get("slot_key"),
+                    "answer": response,
+                    "expected_kinds": sorted(required_kinds),
+                    "available_files": [
+                        {"id": descriptor.get("id"), "name": descriptor.get("name")}
+                        for descriptor in candidates
+                    ],
+                },
+            )
+        selected = matches[0]
+        entity_id = next(
+            (
+                str(selected.get(key)).strip()
+                for key in ("entity_id", "id", "local_asset_id", "cloud_file_id")
+                if selected.get(key) and str(selected.get(key)).strip()
+            ),
+            "",
+        )
+        if not entity_id:
+            raise CliError(
+                "invalid_agent_clarification",
+                "The selected context file has no stable identity for Agent continuation.",
+                {"name": selected.get("name"), "slot_key": clarification.get("slot_key")},
+            )
+        item["value"] = entity_id
+        metadata = selected.get("metadata")
+        metadata = dict(metadata) if isinstance(metadata, dict) else {}
+        metadata.update(
+            {"selection_scope": "current_submission", "input_priority": "highest"}
+        )
+        selected["metadata"] = metadata
+        extra_parameters["selected_entity_id"] = entity_id
+        if "video" in required_kinds:
+            extra_parameters.update(
+                {
+                    "media_id": entity_id,
+                    "source_entity_id": entity_id,
+                    "video_entity_id": entity_id,
+                }
+            )
+    return resolved, extra_parameters
+
+
+def _agent_context_descriptor_match_values(descriptor: dict[str, Any]) -> set[str]:
+    values = {
+        str(descriptor.get(key) or "").strip().casefold()
+        for key in ("entity_id", "id", "local_asset_id", "cloud_file_id", "name")
+        if descriptor.get(key)
+    }
+    name = str(descriptor.get("name") or "").strip()
+    if name:
+        values.add(Path(name).stem.casefold())
+    return {value for value in values if value}
+
+
 def _resolve_agent_clarification_answer(
     clarification: dict[str, Any],
     *,
@@ -1059,6 +1308,10 @@ def _resolve_agent_clarification_answer(
             option_label = str(option.get("label") or option_value).strip()
             if normalized in {option_value.casefold(), option_label.casefold()}:
                 return option_value, option_label
+        if _normalized_clarification_key(clarification.get("slot_key")) == "target_duration_sec":
+            normalized_duration = _normalize_custom_duration_seconds(raw_answer)
+            if normalized_duration is not None:
+                return normalized_duration, normalized_duration
         raise CliError(
             "invalid_clarification_answer",
             "The answer does not match a CinLink clarification option.",
@@ -1080,6 +1333,53 @@ def _resolve_agent_clarification_answer(
             {"clarification_id": clarification.get("id")},
         )
     return raw_answer, raw_answer
+
+
+def _normalized_clarification_key(value: Any) -> str:
+    return re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower()).strip("_")
+
+
+def _normalize_custom_duration_seconds(value: str) -> str | None:
+    normalized = value.strip().lower().replace("：", ":")
+    seconds: float | None = None
+    if ":" in normalized:
+        parts = normalized.split(":")
+        if len(parts) in {2, 3}:
+            try:
+                numbers = [float(item.strip()) for item in parts]
+                seconds = (
+                    numbers[0] * 60 + numbers[1]
+                    if len(numbers) == 2
+                    else numbers[0] * 3600 + numbers[1] * 60 + numbers[2]
+                )
+            except ValueError:
+                seconds = None
+    else:
+        try:
+            seconds = float(normalized)
+        except ValueError:
+            units = {
+                "hours": r"([0-9]+(?:\.[0-9]+)?)\s*(?:hours?|hrs?|hr|h|小时|小時|時間)",
+                "minutes": r"([0-9]+(?:\.[0-9]+)?)\s*(?:minutes?|mins?|min|m|分钟|分鐘|分)",
+                "seconds": r"([0-9]+(?:\.[0-9]+)?)\s*(?:seconds?|secs?|sec|s|秒)",
+            }
+            matches = {
+                key: re.search(pattern, normalized)
+                for key, pattern in units.items()
+            }
+            if any(matches.values()):
+                seconds = sum(
+                    (float(match.group(1)) if match else 0.0) * multiplier
+                    for match, multiplier in (
+                        (matches["hours"], 3600),
+                        (matches["minutes"], 60),
+                        (matches["seconds"], 1),
+                    )
+                )
+    rounded = math.floor(seconds + 0.5) if seconds is not None else None
+    if rounded is None or not 10 <= rounded <= 600:
+        return None
+    return str(rounded)
 
 
 def _continuation_context_descriptors(value: Any) -> list[dict[str, Any]]:
