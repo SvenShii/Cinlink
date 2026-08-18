@@ -239,19 +239,25 @@ A valid local SRT/VTT/ASS passed with one video is marked reusable and linked to
 
 ### agent clarify
 
-When `agent run`, `agent poll`, or a waited result returns `status=requires_user_input` with structured `clarifications`, show the question and option labels to the user, then continue the original task:
+When `agent run`, `agent poll`, or a waited result returns `status=requires_user_input` with structured `clarifications`, show every localized `question`, non-empty `assistant_hint`, option label, and option description to the user, then continue the original task. Honor `input_kind=single_select|text|file_select|image_select` and never silently select `is_default`:
 
 ```bash
 cinlink --json agent clarify <run_id> --response <id_or_slot>=<value> --response <id_or_slot>=<value> --wait --include-events
 ```
 
-Collect every clarification before continuing and send the complete answer set once. `--answers-json` is equivalent to repeated `--response`. The older `--clarification-id` plus `--value`/`--answer` form remains valid for one question. `target_duration_sec` accepts 10-600 seconds, `MM:SS`, `HH:MM:SS`, or localized units. The command carries forward the prior workflow id, conversation, task frame, context artifacts, app language, and compound execution plan. A `requires_user_input` result without `clarifications` is usually an install/authorization request and must not be sent to this command.
+Collect every clarification before continuing and send the complete answer set once. `--answers-json` is equivalent to repeated `--response`. The older `--clarification-id` plus `--value`/`--answer` form remains valid for one question. `target_duration_sec` accepts 10-600 seconds, `MM:SS`, `HH:MM:SS`, or localized units. The command carries forward the prior workflow id, canonical `media_intent`, conversation, task frame, context artifacts, app language, and compound execution plan. A `requires_user_input` result without `clarifications` is usually an install/authorization request and must not be sent to this command.
 
-Media/subtitle selection clarifications accept an exact option value, stable context id, or unique exact context filename. The continuation resolves the name to `entity_id` and marks that descriptor as the current submission. Ambiguous names or the wrong media kind fail instead of selecting another file.
+File/image selection clarifications accept an exact option value, stable context id, unique exact context filename, or authorized absolute local path. The continuation validates the required kind, resolves or creates the matching context descriptor, and marks it as the current submission. Ambiguous names or the wrong media kind fail instead of selecting another file.
 
-Also available: `agent poll`, `agent events`, `agent local-tools`, `agent report-tool-result`. `agent events` reads public planning/reasoning progress over SSE; it never exposes hidden model scratch work. The report command infers artifact kind for `--artifact-path`. Use `--upload-for-cloud-model-input` when reporting `stage_audio` or another non-video local tool output explicitly requested as cloud-model input; it uploads through the authenticated account-scoped Agent file endpoint. It refuses full video uploads. Use repeated `--artifact-json` and `--artifact-metadata-json` to preserve per-artifact roles and lineage.
+For `metadata.reply_interpretation=semantic`, the answer remains the continuation prompt and is not asserted as an exact slot. This is required for free-form watermark content that also carries style or placement instructions.
 
-Completed agent results include `completion_message`, `primary_artifacts`, `supporting_artifacts`, and `intermediate_artifacts`. Deliver primary artifacts as the result, mention supporting artifacts when useful, and do not present intermediate artifacts as final output.
+When a clarification has `metadata.clarification_origin=dub_reference_quality`, `agent clarify` sends `merge_primary`, `continue`, or `cancel` to the original run's `/clarification-results` route. It resumes the same run in place and returns `clarification_resolution=in_place`; it does not create a continuation run.
+
+Also available: `agent poll`, `agent events`, `agent local-tools`, `agent report-tool-result`. `agent events` reads public planning/reasoning progress over SSE; it never exposes hidden model scratch work. The report command infers artifact kind for `--artifact-path`. Use `--upload-for-cloud-model-input` when reporting `stage_audio`, `stage_image`, or another non-video local tool output explicitly requested as cloud-model input; it uploads through the authenticated account-scoped Agent file endpoint. It refuses full video uploads. Use repeated `--artifact-json` and `--artifact-metadata-json` to preserve per-artifact roles and lineage.
+
+Completed agent results include `completion_message`, `primary_artifacts`, `supporting_artifacts`, and `intermediate_artifacts`. Deliver primary artifacts as the result, preserve any voice-reference quality warning in the completion message, mention supporting artifacts when useful, and do not present intermediate artifacts as final output. `source_reference_subtitle` and `plan_output_excluded=true` artifacts are internal sidecars.
+
+Every media workflow returns canonical `workflow_decision.media_intent` with `operation`, `source`, `output`, and string-valued `parameters`. Entity bindings are under `source.bindings`; legacy subtitle-specific top-level fields are accepted only as compatibility input.
 
 Agent and direct media results may include `privacy_receipt`, which records whether the source video stayed local, which derived inputs were processed by CinLink Cloud, and whether final rendering happened locally.
 

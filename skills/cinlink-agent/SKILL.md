@@ -31,6 +31,8 @@ If the current prompt names a target language, that current language wins over r
 
 For free-form media translation, do not infer whether the user wants subtitles or dubbing, and do not infer subtitle-file versus burned-video delivery. Resolve `translation_mode=subtitle|voice` first. If subtitle mode is selected, resolve `output_delivery=subtitle_file|burned_video` next. Inspect `workflow_decision.slot_provenance`; `model_default` and `unknown` are not user-resolved choices.
 
+Treat `workflow_decision.media_intent` as the canonical semantic contract for every media workflow. It always uses `operation`, `source`, `output`, and string-valued `parameters`; source entity bindings live in `source.bindings`. Preserve this envelope through follow-ups and clarifications. Legacy subtitle fields such as top-level `deliverable`, `video_id`, and `subtitle_id` are input compatibility only and must not replace the canonical task frame.
+
 Use `--client-request-id <id>` when the caller has a stable idempotency/correlation id. Use `--hidden-context` or `--hidden-context-file` only for invisible client UI state such as selected settings; never put secrets there, and do not copy hidden context into provider prompts or user-visible text.
 
 For follow-up tasks, preserve rich artifact context from earlier output:
@@ -57,7 +59,7 @@ cinlink --json agent poll <run_id>
 
 ## Structured Clarifications
 
-When a run returns `status=requires_user_input`, inspect `clarifications`. Present each `question` and its option labels to the user; never silently choose `is_default`.
+When a run returns `status=requires_user_input`, inspect `clarifications`. Present each server-localized `question`, non-empty `assistant_hint`, option `label`, and option `description`; use `question_key`, label keys, and `params` only as stable UI metadata. Never silently choose `is_default`.
 
 Collect every visible clarification answer before continuing. Submit the complete set once, keyed by clarification id or `slot_key`:
 
@@ -65,9 +67,13 @@ Collect every visible clarification answer before continuing. Submit the complet
 cinlink --json agent clarify <run_id> --response translation_mode=subtitle --response output_delivery=burned_video --wait --include-events
 ```
 
-For a single clarification, the compatible `--clarification-id <id> --value <value>` or `--answer "<text>"` form remains valid. Use `--answers-json '{"slot":"value"}'` when JSON is easier. `target_duration_sec` accepts an option or a custom duration from 10 to 600 seconds, including `90`, `1:30`, `00:01:30`, and localized units. Never start a continuation while another clarification from the same response is unresolved. `agent clarify` preserves the original workflow id, task frame, conversation, context files, app language, and compound execution plan; do not rebuild these fields manually.
+For a single clarification, the compatible `--clarification-id <id> --value <value>` or `--answer "<text>"` form remains valid. Use `--answers-json '{"slot":"value"}'` when JSON is easier. `target_duration_sec` accepts an option or a custom duration from 10 to 600 seconds, including `90`, `1:30`, `00:01:30`, and localized units. Never start a continuation while another clarification from the same response is unresolved. `agent clarify` preserves the original workflow id, canonical media intent, task frame, conversation, context files, app language, and compound execution plan; do not rebuild these fields manually.
 
-For media/subtitle file-selection slots, pass the exact option value, stable context id, or exact context filename. The CLI resolves a unique name to its `entity_id` and elevates that descriptor to the current submission. If the name is ambiguous, unavailable, the wrong media kind, or an untimed TXT is offered where timed subtitles are required, ask the user to choose a valid exact file instead of guessing.
+Honor `input_kind`: render `single_select` as options, collect `text` verbatim, and ask the user to choose an authorized file for `file_select` or `image_select`. File/image selections accept the exact option value, stable context id, unique exact context filename, or an absolute local path. The CLI resolves or adds that exact file, validates its kind, and elevates it to the current submission. If the name is ambiguous, unavailable, the wrong kind, or an untimed TXT is offered where timed subtitles are required, ask for a valid exact file instead of guessing.
+
+When clarification metadata has `reply_interpretation=semantic`, keep the whole answer as the continuation prompt instead of asserting it as an exact slot value. This lets a watermark answer such as text plus position/color remain structured by the planner rather than becoming literal watermark text.
+
+`agent clarify` automatically detects `metadata.clarification_origin=dub_reference_quality`. The choices `merge_primary`, `continue`, and `cancel` are sent to `/v1/agent/runs/<run_id>/clarification-results`, resuming or finishing the original run rather than creating a new one. Do not rebuild or resubmit this runtime clarification yourself.
 
 Some install or capability approvals use `requires_user_input` without a structured `clarifications` array. Ask for the requested authorization and follow the local install/tool flow instead of calling `agent clarify`.
 
@@ -96,7 +102,7 @@ cinlink --json agent local-tools <run_id>
 cinlink --json agent report-tool-result <run_id> --tool-call-id <id> --status done --artifact-path /absolute/out.mp4 --artifact-metadata-json '{"artifact_role":"edited_video","producer_step":"trim_video"}'
 ```
 
-Current Hermes-first media tools include `stage_audio`, `stage_subtitle`, `search_analyzed_videos`, `extract_audio`, `extract_video_frames`, `probe_video`, `trim_video`, `crop_resize_video`, `transcode_video`, `apply_watermark`, `burn_subtitles`, `render_highlight_clips`, `render_visual_match_clips`, `render_styled_edit`, `mix_background_music`, `merge_video_clips`, `enhance_image`, `enhance_video`, and `compose_dubbed_video`. General local context tools include `local_file_search`, `local_file_read`, `local_clipboard_read`, `local_screenshot`, and `local_app_context`. Only advertise, execute, and report a local tool when the local environment actually has the matching capability and user authorization.
+Current Hermes-first media tools include `stage_audio`, `stage_image`, `stage_subtitle`, `search_analyzed_videos`, `extract_audio`, `extract_video_frames`, `probe_video`, `trim_video`, `crop_resize_video`, `transcode_video`, `apply_watermark`, `burn_subtitles`, `render_highlight_clips`, `render_visual_match_clips`, `render_styled_edit`, `mix_background_music`, `merge_video_clips`, `enhance_image`, `enhance_video`, and `compose_dubbed_video`. General local context tools include `local_file_search`, `local_file_read`, `local_clipboard_read`, `local_screenshot`, and `local_app_context`. Only advertise, execute, and report a local tool when the local environment actually has the matching capability and user authorization.
 
 `stage_audio` makes an already authorized local audio file available to a later cloud model step. Report it with the account-scoped upload flag:
 
@@ -105,6 +111,12 @@ cinlink --json agent report-tool-result <run_id> --tool-call-id <id> --status do
 ```
 
 Use the same upload flag when an authorized screenshot/image or subtitle/document local tool explicitly asks for cloud-model input. Never use it for a video; CinLink keeps full source videos local.
+
+For `stage_image`, report the exact authorized image with the same account-scoped upload flow:
+
+```bash
+cinlink --json agent report-tool-result <run_id> --tool-call-id <id> --status done --artifact-path /absolute/reference.png --artifact-metadata-json '{"producer_step":"stage_image"}' --upload-for-cloud-model-input
+```
 
 Local/server tool arguments use a string-only wire contract. Boolean values are `true`/`false`; list-like values may arrive as newline-delimited text, comma-delimited text, or a JSON array string. Parse those forms without corrupting Windows drive-letter paths.
 
@@ -128,7 +140,7 @@ When a user asks for the current project/workspace file list, issue a real `loca
 
 Return the run's `privacy_receipt` in user-facing terms: what stayed local, which derived inputs went to CinLink Cloud, and whether final video rendering happened locally.
 
-When a run finishes, use `completion_message` as the user-facing completion text. Deliver `primary_artifacts` as the actual result, mention `supporting_artifacts` only when useful, and do not present `intermediate_artifacts` as final output. The raw `artifacts` list remains available for compatibility but should not drive final delivery.
+When a run finishes, use `completion_message` as the user-facing completion text, including any short voice-reference quality warning it contains. Deliver `primary_artifacts` as the actual result, mention `supporting_artifacts` only when useful, and do not present `intermediate_artifacts` as final output. `source_reference_subtitle` and artifacts marked `plan_output_excluded=true` are internal sidecars, not final results. The raw `artifacts` list remains available for compatibility but should not drive final delivery.
 
 On failure, show only the returned public `code` and `message`. Preserve safe `details` fields such as `processing_stage`, `provider`, `request_id`, and `retryable` for troubleshooting. Retry only when `retryable=true`; never expose or invent provider internals.
 

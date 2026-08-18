@@ -68,6 +68,8 @@ For video summary and shortening, the current CLI also keeps the full video loca
 
 Local files passed to an Agent run are marked as the current submission and receive highest input priority over stale conversation artifacts. Multiple current files remain ambiguous and may still require clarification.
 
+Agent results use canonical `workflow_decision.media_intent` (`operation`, `source`, `output`, `parameters`). Present server-localized structured clarifications according to `input_kind`; `file_select` and `image_select` require the user's exact authorized file. See `/cinlink-agent` for continuation and same-run clarification rules.
+
 ### Local Editing Workflows
 
 Route to `/cinlink-editing` for:

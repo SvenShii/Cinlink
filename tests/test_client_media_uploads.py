@@ -496,6 +496,144 @@ class RuntimeClientMediaUploadTests(unittest.TestCase):
         descriptor = create.call_args.kwargs["context_descriptors"][0]
         self.assertEqual(descriptor["metadata"]["selection_scope"], "current_submission")
 
+    def test_agent_image_select_accepts_authorized_local_path(self) -> None:
+        previous = {
+            "run_id": "run-1",
+            "conversation_id": "conversation-1",
+            "status": "requires_user_input",
+            "mode": "execute",
+            "app_language": "en",
+            "conversation_state": {},
+            "task_frame": {"workflow_decision": {"workflow_id": "watermark"}},
+            "context_files": [
+                {
+                    "id": "video-1",
+                    "name": self.video.name,
+                    "kind": "video",
+                    "local_path": str(self.video),
+                    "metadata": {},
+                }
+            ],
+            "clarifications": [
+                {
+                    "id": "reference_image_urls:0",
+                    "slot_key": "reference_image_urls",
+                    "workflow_id": "watermark",
+                    "question": "Select a watermark image.",
+                    "input_kind": "image_select",
+                    "options": [],
+                    "metadata": {"accepted_file_kinds": "image"},
+                }
+            ],
+        }
+        with patch.object(
+            self.client, "get_agent_run", return_value=previous
+        ), patch.object(
+            self.client,
+            "create_agent_run",
+            return_value={"run_id": "run-2", "status": "queued"},
+        ) as create:
+            self.client.continue_agent_clarification(
+                "run-1",
+                answer=str(self.reference_image),
+            )
+
+        parameters = create.call_args.kwargs["task_parameters"]
+        self.assertEqual(parameters["reference_image_urls"], parameters["image_entity_id"])
+        self.assertEqual(parameters["selected_entity_id"], parameters["image_entity_id"])
+        self.assertEqual(parameters["watermark_kind"], "image")
+        image = next(
+            item
+            for item in create.call_args.kwargs["context_descriptors"]
+            if item["kind"] == "image"
+        )
+        self.assertEqual(image["local_path"], str(self.reference_image.resolve()))
+        self.assertEqual(image["entity_id"], parameters["image_entity_id"])
+        self.assertEqual(image["metadata"]["selection_scope"], "current_submission")
+
+    def test_runtime_clarification_resumes_original_run_in_place(self) -> None:
+        previous = {
+            "run_id": "run-1",
+            "status": "requires_user_input",
+            "clarifications": [
+                {
+                    "id": "dub_reference_quality:synthesize",
+                    "slot_key": "short_reference_action",
+                    "workflow_id": "dub_video",
+                    "question": "The voice reference is short. Continue?",
+                    "input_kind": "single_select",
+                    "options": [
+                        {"value": "merge_primary", "label": "Merge with primary"},
+                        {"value": "continue", "label": "Continue"},
+                        {"value": "cancel", "label": "Cancel"},
+                    ],
+                    "metadata": {"clarification_origin": "dub_reference_quality"},
+                }
+            ],
+        }
+        with patch.object(
+            self.client, "get_agent_run", return_value=previous
+        ), patch.object(
+            self.client,
+            "resolve_agent_clarification",
+            return_value={"run_id": "run-1", "status": "running"},
+        ) as resolve, patch.object(self.client, "create_agent_run") as create:
+            result = self.client.continue_agent_clarification(
+                "run-1",
+                value="continue",
+            )
+
+        resolve.assert_called_once_with(
+            "run-1",
+            clarification_id="dub_reference_quality:synthesize",
+            option_value="continue",
+        )
+        create.assert_not_called()
+        self.assertEqual(result["run_id"], "run-1")
+        self.assertEqual(result["clarification_resolution"], "in_place")
+        self.assertEqual(result["answered_clarification"]["value"], "continue")
+
+    def test_semantic_clarification_keeps_answer_in_prompt_not_exact_slot(self) -> None:
+        previous = {
+            "run_id": "run-1",
+            "conversation_id": "conversation-1",
+            "status": "requires_user_input",
+            "mode": "execute",
+            "app_language": "zh-Hans",
+            "conversation_state": {},
+            "task_frame": {"workflow_decision": {"workflow_id": "watermark"}},
+            "context_files": [],
+            "clarifications": [
+                {
+                    "id": "watermark_text:0",
+                    "slot_key": "watermark_text",
+                    "workflow_id": "watermark",
+                    "question": "水印写什么？",
+                    "input_kind": "text",
+                    "options": [],
+                    "metadata": {"reply_interpretation": "semantic"},
+                }
+            ],
+        }
+        with patch.object(
+            self.client, "get_agent_run", return_value=previous
+        ), patch.object(
+            self.client,
+            "create_agent_run",
+            return_value={"run_id": "run-2", "status": "queued"},
+        ) as create:
+            self.client.continue_agent_clarification(
+                "run-1",
+                answer="右下角写 CinLink，白色半透明",
+            )
+
+        self.assertEqual(create.call_args.args[0], "右下角写 CinLink，白色半透明")
+        self.assertNotIn(
+            "watermark_text",
+            create.call_args.kwargs["task_parameters"],
+        )
+        self.assertEqual(create.call_args.kwargs["task_intent"], "watermark")
+
     def test_failed_job_preserves_safe_retry_diagnostics(self) -> None:
         with patch.object(
             self.client,

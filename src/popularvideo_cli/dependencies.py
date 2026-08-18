@@ -131,6 +131,7 @@ def default_client_capabilities_from_dependencies() -> dict[str, bool]:
     subtitle_burn_available = bool(report["ffmpeg"].get("subtitle_burn_available"))
     voice_separation_available = bool(report["local_voice_separation"]["available"])
     enhancement_available = bool(report["local_media_enhancement"]["available"])
+    waifu2x_available = bool(report["waifu2x"]["available"])
     return {
         "can_search_analyzed_videos": False,
         "can_search_local_files": False,
@@ -138,6 +139,7 @@ def default_client_capabilities_from_dependencies() -> dict[str, bool]:
         "can_read_clipboard": False,
         "can_capture_screenshot": False,
         "can_read_app_context": False,
+        "can_stage_image_locally": True,
         "can_extract_audio_locally": ffmpeg_available,
         "can_extract_video_frames_locally": ffmpeg_available,
         "can_probe_video_locally": editing_available,
@@ -153,8 +155,14 @@ def default_client_capabilities_from_dependencies() -> dict[str, bool]:
         "can_clean_cut_locally": editing_available,
         "can_manage_brand_kit_locally": True,
         "can_download_artifacts": True,
+        "shell_ffmpeg_available": ffmpeg_available,
+        "shell_ffprobe_available": ffprobe_available,
+        "shell_ffmpeg_subtitles_available": subtitle_burn_available,
+        "shell_video_encoder_available": ffmpeg_available,
+        "shell_waifu2x_available": waifu2x_available,
         "supports_agent_event_stream": True,
         "supports_agent_reasoning_stream": True,
+        "supports_image_select_clarification": True,
     }
 
 

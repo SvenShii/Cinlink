@@ -391,6 +391,23 @@ class RuntimeClient:
         payload = self._request("GET", f"/v1/agent/runs/{run_id}")
         return _with_agent_privacy_receipt(_with_agent_delivery(payload))
 
+    def resolve_agent_clarification(
+        self,
+        run_id: str,
+        *,
+        clarification_id: str,
+        option_value: str,
+    ) -> dict[str, Any]:
+        payload = self._request(
+            "POST",
+            f"/v1/agent/runs/{run_id}/clarification-results",
+            json_body={
+                "clarification_id": clarification_id,
+                "option_value": option_value,
+            },
+        )
+        return _with_agent_privacy_receipt(_with_agent_delivery(payload))
+
     def continue_agent_clarification(
         self,
         run_id: str,
@@ -417,6 +434,49 @@ class RuntimeClient:
             answer=answer,
             answers=answers,
         )
+
+        in_place = [
+            item for item in resolved
+            if _is_in_place_agent_clarification(item["clarification"])
+        ]
+        if in_place:
+            if len(resolved) != 1 or len(in_place) != 1:
+                raise CliError(
+                    "invalid_agent_clarification",
+                    "An in-place CinLink clarification must be resolved by itself on the original Agent run.",
+                    {"run_id": run_id},
+                )
+            selected = in_place[0]
+            selected_clarification = selected["clarification"]
+            updated = self.resolve_agent_clarification(
+                run_id,
+                clarification_id=str(selected_clarification.get("id") or ""),
+                option_value=selected["value"],
+            )
+            if wait and updated.get("status") not in {
+                "done",
+                "failed",
+                "requires_user_input",
+                "waiting_for_local",
+            }:
+                updated = self.wait_for_agent_run(
+                    run_id,
+                    timeout=timeout,
+                    include_events=include_events,
+                )
+            answered = {
+                "id": selected_clarification.get("id"),
+                "slot_key": selected_clarification.get("slot_key"),
+                "value": selected["value"],
+                "label": selected["label"],
+            }
+            return {
+                **updated,
+                "continued_from_run_id": run_id,
+                "clarification_resolution": "in_place",
+                "answered_clarifications": [answered],
+                "answered_clarification": answered,
+            }
 
         previous_conversation_state = previous.get("conversation_state")
         previous_conversation_state = (
@@ -451,6 +511,7 @@ class RuntimeClient:
         task_parameters = {
             str(item["clarification"]["slot_key"]).strip(): item["value"]
             for item in resolved
+            if not _clarification_requires_semantic_planning(item["clarification"])
         }
         task_parameters.update(file_selection_parameters)
         app_language = str(previous.get("app_language") or "").strip()
@@ -1203,12 +1264,28 @@ def _resolve_agent_file_clarifications(
         "subtitle_id": {"subtitle"},
         "subtitle_file_id": {"subtitle"},
         "subtitle_entity_id": {"subtitle"},
+        "image_id": {"image"},
+        "image_file_id": {"image"},
+        "image_entity_id": {"image"},
+        "reference_image_urls": {"image"},
     }
     extra_parameters: dict[str, str] = {}
     for item in resolved:
         clarification = item["clarification"]
         slot_key = _normalized_clarification_key(clarification.get("slot_key"))
         required_kinds = required_kinds_by_slot.get(slot_key)
+        input_kind = str(clarification.get("input_kind") or "text").strip().lower()
+        metadata = clarification.get("metadata")
+        metadata = metadata if isinstance(metadata, dict) else {}
+        if not required_kinds and input_kind == "image_select":
+            required_kinds = {"image"}
+        if not required_kinds and input_kind == "file_select":
+            accepted = str(metadata.get("accepted_file_kinds") or "").strip()
+            required_kinds = {
+                value
+                for value in re.split(r"[,|;\s]+", accepted.lower())
+                if value
+            } or {"video", "audio", "subtitle", "image", "document", "other"}
         if not required_kinds:
             continue
         response = str(item["value"]).strip()
@@ -1223,6 +1300,21 @@ def _resolve_agent_file_clarifications(
             for descriptor in candidates
             if normalized_response in _agent_context_descriptor_match_values(descriptor)
         ]
+        if not matches:
+            selected_path = Path(response.strip("@\"'“”‘’ ")).expanduser()
+            if selected_path.is_file():
+                selected_kind = infer_artifact_kind(selected_path)
+                if selected_kind in required_kinds:
+                    descriptor = _context_file_payload(
+                        selected_path,
+                        current_submission=True,
+                    )
+                    local_entity_id = f"cli-context-{uuid4()}"
+                    descriptor["id"] = local_entity_id
+                    descriptor["entity_id"] = local_entity_id
+                    context_descriptors.append(descriptor)
+                    candidates.append(descriptor)
+                    matches = [descriptor]
         if len(matches) != 1:
             raise CliError(
                 "invalid_clarification_answer",
@@ -1254,12 +1346,13 @@ def _resolve_agent_file_clarifications(
                 {"name": selected.get("name"), "slot_key": clarification.get("slot_key")},
             )
         item["value"] = entity_id
-        metadata = selected.get("metadata")
-        metadata = dict(metadata) if isinstance(metadata, dict) else {}
-        metadata.update(
+        item["label"] = str(selected.get("name") or item["label"])
+        selected_metadata = selected.get("metadata")
+        selected_metadata = dict(selected_metadata) if isinstance(selected_metadata, dict) else {}
+        selected_metadata.update(
             {"selection_scope": "current_submission", "input_priority": "highest"}
         )
-        selected["metadata"] = metadata
+        selected["metadata"] = selected_metadata
         extra_parameters["selected_entity_id"] = entity_id
         if "video" in required_kinds:
             extra_parameters.update(
@@ -1269,6 +1362,18 @@ def _resolve_agent_file_clarifications(
                     "video_entity_id": entity_id,
                 }
             )
+        if "image" in required_kinds:
+            extra_parameters.update(
+                {
+                    "image_entity_id": entity_id,
+                    "reference_image_urls": entity_id,
+                }
+            )
+            if (
+                slot_key == "reference_image_urls"
+                and str(clarification.get("workflow_id") or "").strip() == "watermark"
+            ):
+                extra_parameters["watermark_kind"] = "image"
     return resolved, extra_parameters
 
 
@@ -1337,6 +1442,20 @@ def _resolve_agent_clarification_answer(
 
 def _normalized_clarification_key(value: Any) -> str:
     return re.sub(r"[^a-z0-9]+", "_", str(value or "").strip().lower()).strip("_")
+
+
+def _is_in_place_agent_clarification(clarification: dict[str, Any]) -> bool:
+    metadata = clarification.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    return str(metadata.get("clarification_origin") or "").strip() == "dub_reference_quality"
+
+
+def _clarification_requires_semantic_planning(
+    clarification: dict[str, Any],
+) -> bool:
+    metadata = clarification.get("metadata")
+    metadata = metadata if isinstance(metadata, dict) else {}
+    return str(metadata.get("reply_interpretation") or "").strip() == "semantic"
 
 
 def _normalize_custom_duration_seconds(value: str) -> str | None:
@@ -1723,7 +1842,10 @@ def infer_artifact_kind(path: Path) -> str:
         return "audio"
     if suffix in {".srt", ".vtt", ".ass", ".ssa"}:
         return "subtitle"
-    if suffix in {".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif"}:
+    if suffix in {
+        ".png", ".jpg", ".jpeg", ".webp", ".gif", ".avif",
+        ".heic", ".heif", ".tif", ".tiff", ".bmp",
+    }:
         return "image"
     if suffix in {".txt", ".md", ".pdf", ".doc", ".docx", ".json"}:
         return "document"
@@ -1781,6 +1903,7 @@ _INTERNAL_ARTIFACT_ROLES = {
     "intermediate",
     "reference_subtitle",
     "source_audio",
+    "source_reference_subtitle",
     "source_subtitle",
     "transcript",
 }
@@ -1854,17 +1977,25 @@ def _with_agent_delivery(payload: dict[str, Any]) -> dict[str, Any]:
         metadata = metadata if isinstance(metadata, dict) else {}
         return str(metadata.get(key) or "").strip().lower()
 
+    def is_internal(artifact: dict[str, Any]) -> bool:
+        return role(artifact, "artifact_role") in _INTERNAL_ARTIFACT_ROLES or role(
+            artifact, "plan_output_excluded"
+        ) in {"1", "true", "yes"}
+
     primary_indexes = {
         index
         for index, artifact in enumerate(artifacts)
-        if str(artifact.get("id") or "") in primary_ids
+        if str(artifact.get("id") or "") in primary_ids and not is_internal(artifact)
     }
     if not primary_indexes:
         primary_indexes = {
             index
             for index, artifact in enumerate(artifacts)
-            if role(artifact, "delivery_role") == "primary"
-            or role(artifact, "artifact_role") in _FINAL_ARTIFACT_ROLES
+            if not is_internal(artifact)
+            and (
+                role(artifact, "delivery_role") == "primary"
+                or role(artifact, "artifact_role") in _FINAL_ARTIFACT_ROLES
+            )
         }
     if not primary_indexes:
         completed_node_ids = {
@@ -1882,7 +2013,7 @@ def _with_agent_delivery(payload: dict[str, Any]) -> dict[str, Any]:
         primary_indexes = {
             index
             for index, artifact in enumerate(artifacts)
-            if role(artifact, "artifact_role") not in _INTERNAL_ARTIFACT_ROLES
+            if not is_internal(artifact)
             and role(artifact, "plan_node_id") in terminal_ids
         }
     if not primary_indexes:
@@ -1891,17 +2022,24 @@ def _with_agent_delivery(payload: dict[str, Any]) -> dict[str, Any]:
             for index, artifact in enumerate(artifacts)
             if str(artifact.get("kind") or "").lower()
             in {"video", "image", "document", "summary", "subtitle", "translation"}
-            and role(artifact, "artifact_role") not in _INTERNAL_ARTIFACT_ROLES
+            and not is_internal(artifact)
         ]
         if deliverable:
             primary_indexes = {deliverable[-1]}
-        elif artifacts:
-            primary_indexes = {len(artifacts) - 1}
+        else:
+            non_internal = [
+                index
+                for index, artifact in enumerate(artifacts)
+                if not is_internal(artifact)
+            ]
+            if non_internal:
+                primary_indexes = {non_internal[-1]}
 
     supporting_indexes = {
         index
         for index, artifact in enumerate(artifacts)
         if index not in primary_indexes
+        and not is_internal(artifact)
         and (
             str(artifact.get("id") or "") in supporting_ids
             or role(artifact, "delivery_role") == "supporting"

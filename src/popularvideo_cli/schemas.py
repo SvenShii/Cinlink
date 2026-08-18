@@ -701,12 +701,66 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "intermediate_artifacts": {"type": "array"},
                 "clarifications": {
                     "type": "array",
-                    "description": "Structured questions returned when status is requires_user_input. Present all questions, collect all answers, then continue once with agent_clarify.",
+                    "description": "Localized structured questions returned when status is requires_user_input. Present every question, assistant_hint, option label, and description; collect all answers, then call agent_clarify once. file_select and image_select require an exact stable id, exact filename, or authorized local path.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "id": {"type": "string"},
+                            "slot_key": {"type": "string"},
+                            "question": {"type": "string"},
+                            "question_key": {"type": ["string", "null"]},
+                            "input_kind": {
+                                "type": "string",
+                                "enum": ["single_select", "text", "file_select", "image_select"],
+                            },
+                            "params": {"type": "object", "additionalProperties": {"type": "string"}},
+                            "assistant_hint": {"type": ["string", "null"]},
+                            "metadata": {"type": "object", "additionalProperties": {"type": "string"}},
+                            "options": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "value": {"type": "string"},
+                                        "label": {"type": "string"},
+                                        "description": {"type": ["string", "null"]},
+                                        "is_default": {"type": "boolean"},
+                                        "label_key": {"type": ["string", "null"]},
+                                        "description_key": {"type": ["string", "null"]},
+                                        "params": {"type": "object", "additionalProperties": {"type": "string"}},
+                                    },
+                                },
+                            },
+                        },
+                    },
                 },
                 "workflow_decision": {
                     "type": "object",
-                    "description": "Structured route decision. Inspect slot_provenance before execution-sensitive choices; model_default and unknown do not count as user-resolved translation_mode or output_delivery.",
+                    "description": "Structured route decision. Inspect slot_provenance before execution-sensitive choices; model_default and unknown do not count as user-resolved translation_mode or output_delivery. media_intent is the canonical operation/source/output/parameters envelope for every media workflow.",
                     "properties": {
+                        "media_intent": {
+                            "type": ["object", "null"],
+                            "description": "Canonical media intent. Legacy subtitle-specific top-level fields are input compatibility only.",
+                            "properties": {
+                                "operation": {"type": "string"},
+                                "source": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string"},
+                                        "bindings": {"type": "object", "additionalProperties": {"type": "string"}},
+                                        "reference": {"type": "string"},
+                                    },
+                                },
+                                "output": {
+                                    "type": "object",
+                                    "properties": {
+                                        "kind": {"type": "string"},
+                                        "delivery": {"type": "string"},
+                                    },
+                                },
+                                "parameters": {"type": "object", "additionalProperties": {"type": "string"}},
+                            },
+                        },
                         "slot_provenance": {
                             "type": "array",
                             "items": {
@@ -735,7 +789,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         },
     },
     "agent_clarify": {
-        "description": "Answer all structured clarifications from a CinLink Agent run and continue the same task once. The tool preserves the prior workflow, task frame, conversation, context artifacts, language, and resolved slot values.",
+        "description": "Answer all structured clarifications from a CinLink Agent run and continue once. Planning clarifications preserve the prior workflow, canonical media intent, task frame, conversation, context artifacts, language, and resolved slots. Runtime dubbing-reference clarifications resume the original run in place.",
         "input_schema": {
             "type": "object",
             "required": ["run_id"],
@@ -750,11 +804,11 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 },
                 "value": {
                     "type": "string",
-                    "description": "Option value or label for a single_select clarification.",
+                    "description": "Option value or localized label for a single_select clarification.",
                 },
                 "answer": {
                     "type": "string",
-                    "description": "Free-form answer for a text clarification. It may also contain an option value or label.",
+                    "description": "Free-form answer for text, or an exact stable id, exact filename, or authorized local path for file_select/image_select. It may also contain an option value or label.",
                 },
                 "answers": {
                     "type": "object",
@@ -779,6 +833,11 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
             "properties": {
                 "run_id": {"type": "string"},
                 "continued_from_run_id": {"type": "string"},
+                "clarification_resolution": {
+                    "type": "string",
+                    "enum": ["in_place"],
+                    "description": "Present when the original Agent run was resumed directly instead of creating a continuation run.",
+                },
                 "answered_clarification": {"type": "object"},
                 "answered_clarifications": {"type": "array"},
                 "status": {"type": "string"},

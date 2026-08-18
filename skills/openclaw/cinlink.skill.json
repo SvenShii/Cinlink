@@ -23,12 +23,12 @@
     },
     {
       "name": "cinlink_agent_run",
-      "description": "Submit a natural-language media task with current-input priority, slot provenance, and structured translation-delivery clarification.",
+      "description": "Submit a natural-language media task with current-input priority, canonical media intent, slot provenance, and localized structured clarification.",
       "tool_arg": "agent_run"
     },
     {
       "name": "cinlink_agent_clarify",
-      "description": "Collect all structured clarification answers and continue the original workflow once.",
+      "description": "Collect all structured answers, including exact file/image selections, then continue once; runtime dubbing-reference choices resume the original run in place.",
       "tool_arg": "agent_clarify"
     },
     {

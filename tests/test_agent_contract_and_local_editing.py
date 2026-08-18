@@ -11,9 +11,11 @@ from popularvideo_cli.client import (
     _iter_sse_events,
     _with_agent_delivery,
     artifact_ref_from_path,
+    infer_artifact_kind,
 )
 from popularvideo_cli.cli import build_parser, run_agent_command
 from popularvideo_cli.config import Settings, load_settings, render_options, update_brand_kit
+from popularvideo_cli.dependencies import default_client_capabilities_from_dependencies
 from popularvideo_cli.local_tools import _clean_cut_removals, _inverse_ranges
 from popularvideo_cli.local_setup import setup_local_dependencies
 from popularvideo_cli.enhancement import enhance_image
@@ -32,6 +34,28 @@ class RecordingClient(RuntimeClient):
 
 
 class AgentContractTests(unittest.TestCase):
+    def test_default_capabilities_advertise_image_staging_and_selection(self) -> None:
+        report = {
+            "ffmpeg": {"available": True, "subtitle_burn_available": True},
+            "ffprobe": {"available": True},
+            "local_voice_separation": {"available": False},
+            "local_media_enhancement": {"available": True},
+            "waifu2x": {"available": True},
+        }
+        with mock.patch(
+            "popularvideo_cli.dependencies.local_dependency_report",
+            return_value=report,
+        ):
+            capabilities = default_client_capabilities_from_dependencies()
+
+        self.assertTrue(capabilities["can_stage_image_locally"])
+        self.assertTrue(capabilities["supports_image_select_clarification"])
+        self.assertTrue(capabilities["shell_ffmpeg_available"])
+        self.assertTrue(capabilities["shell_ffprobe_available"])
+        self.assertTrue(capabilities["shell_ffmpeg_subtitles_available"])
+        self.assertTrue(capabilities["shell_video_encoder_available"])
+        self.assertTrue(capabilities["shell_waifu2x_available"])
+
     def test_agent_run_sends_language_and_rich_context(self) -> None:
         client = RecordingClient()
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -66,6 +90,28 @@ class AgentContractTests(unittest.TestCase):
         client.video("animate it", reference_image_urls=["https://cdn.example/ref.png"])
         body = client.requests[-1]["json_body"]
         self.assertEqual(body["generation_mode"], "reference")
+
+    def test_agent_clarification_resolution_uses_in_place_runtime_route(self) -> None:
+        client = RecordingClient()
+        client.resolve_agent_clarification(
+            "run-1",
+            clarification_id="dub_reference_quality:synthesize",
+            option_value="merge_primary",
+        )
+
+        request = client.requests[-1]
+        self.assertEqual(request["method"], "POST")
+        self.assertEqual(
+            request["path"],
+            "/v1/agent/runs/run-1/clarification-results",
+        )
+        self.assertEqual(
+            request["json_body"],
+            {
+                "clarification_id": "dub_reference_quality:synthesize",
+                "option_value": "merge_primary",
+            },
+        )
 
     def test_artifact_kind_is_inferred_from_extension(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -164,6 +210,41 @@ class AgentContractTests(unittest.TestCase):
         self.assertEqual([item["id"] for item in payload["primary_artifacts"]], ["video-1"])
         self.assertEqual([item["id"] for item in payload["supporting_artifacts"]], ["subtitle-1"])
         self.assertEqual([item["id"] for item in payload["intermediate_artifacts"]], ["audio-1"])
+
+    def test_agent_delivery_excludes_source_reference_subtitle_from_primary(self) -> None:
+        payload = _with_agent_delivery(
+            {
+                "completion": {"primary_artifact_ids": ["reference-1"]},
+                "artifacts": [
+                    {
+                        "id": "subtitle-1",
+                        "name": "captions.srt",
+                        "kind": "subtitle",
+                        "metadata": {"artifact_role": "source_subtitle"},
+                    },
+                    {
+                        "id": "reference-1",
+                        "name": "source.reference.srt",
+                        "kind": "subtitle",
+                        "metadata": {
+                            "artifact_role": "source_reference_subtitle",
+                            "plan_output_excluded": "true",
+                        },
+                    },
+                ]
+            }
+        )
+
+        self.assertEqual(payload["primary_artifacts"], [])
+        self.assertEqual(
+            [item["id"] for item in payload["intermediate_artifacts"]],
+            ["subtitle-1", "reference-1"],
+        )
+
+    def test_image_kind_supports_agent_image_select_formats(self) -> None:
+        for extension in (".png", ".heic", ".tiff", ".bmp"):
+            with self.subTest(extension=extension):
+                self.assertEqual(infer_artifact_kind(Path(f"logo{extension}")), "image")
 
     def test_local_tool_report_can_stage_non_video_for_cloud_model(self) -> None:
         class ReportClient:
