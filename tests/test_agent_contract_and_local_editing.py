@@ -16,7 +16,7 @@ from popularvideo_cli.client import (
 from popularvideo_cli.cli import build_parser, run_agent_command
 from popularvideo_cli.config import Settings, load_settings, render_options, update_brand_kit
 from popularvideo_cli.dependencies import default_client_capabilities_from_dependencies
-from popularvideo_cli.local_tools import _clean_cut_removals, _inverse_ranges
+from popularvideo_cli.local_tools import _clean_cut_removals, _inverse_ranges, clean_cut
 from popularvideo_cli.local_setup import setup_local_dependencies
 from popularvideo_cli.enhancement import enhance_image
 from popularvideo_cli.schemas import TOOL_SCHEMAS
@@ -241,6 +241,31 @@ class AgentContractTests(unittest.TestCase):
             ["subtitle-1", "reference-1"],
         )
 
+    def test_agent_delivery_keeps_raw_web_query_supporting_only(self) -> None:
+        payload = _with_agent_delivery(
+            {
+                "completion": {
+                    "message": "Cited answer.",
+                    "primary_artifact_ids": ["web-raw-1"],
+                },
+                "artifacts": [
+                    {
+                        "id": "web-raw-1",
+                        "name": "web-query.json",
+                        "kind": "document",
+                        "metadata": {"artifact_role": "web_query_raw"},
+                    }
+                ],
+            }
+        )
+
+        self.assertEqual(payload["completion_message"], "Cited answer.")
+        self.assertEqual(payload["primary_artifacts"], [])
+        self.assertEqual(
+            [item["id"] for item in payload["supporting_artifacts"]],
+            ["web-raw-1"],
+        )
+
     def test_image_kind_supports_agent_image_select_formats(self) -> None:
         for extension in (".png", ".heic", ".tiff", ".bmp"):
             with self.subTest(extension=extension):
@@ -353,6 +378,18 @@ class AgentContractTests(unittest.TestCase):
                 "--wait",
             ]
         )
+        clean = parser.parse_args(
+            [
+                "clean-cut",
+                "/tmp/source.mp4",
+                "--plan-only",
+                "--minimum-silence",
+                "0.6",
+            ]
+        )
+        shorten = parser.parse_args(
+            ["shorten", "/tmp/source.mp4", "--output-language", "ja"]
+        )
 
         self.assertEqual(deconstruct.command, "deconstruct-video")
         self.assertEqual(
@@ -369,6 +406,13 @@ class AgentContractTests(unittest.TestCase):
         self.assertEqual(clarify.agent_command, "clarify")
         self.assertEqual(clarify.value, "voice")
         self.assertTrue(clarify.wait)
+        self.assertTrue(clean.plan_only)
+        self.assertEqual(clean.minimum_silence_sec, 0.6)
+        self.assertEqual(shorten.output_language, "ja")
+        self.assertEqual(
+            TOOL_SCHEMAS["clean_cut"]["input_schema"]["properties"]["minimum_silence_sec"]["default"],
+            0.85,
+        )
 
 
 class BrandKitAndEditingTests(unittest.TestCase):
@@ -457,6 +501,68 @@ class BrandKitAndEditingTests(unittest.TestCase):
         keep = _inverse_ranges(removals, 8.0)
         self.assertEqual(removals, [(1.12, 2.88)])
         self.assertEqual(keep, [(0.0, 1.12), (2.88, 8.0)])
+
+    def test_clean_cut_plan_returns_indexed_candidates_without_rendering(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            video = Path(temp_dir) / "source.mp4"
+            video.write_bytes(b"video")
+            with mock.patch(
+                "popularvideo_cli.local_tools.probe_video_duration",
+                return_value=10.0,
+            ), mock.patch(
+                "popularvideo_cli.local_tools.detect_silence",
+                return_value=[(1.0, 3.0), (5.0, 7.0)],
+            ), mock.patch("popularvideo_cli.local_tools._render_segment") as render:
+                result = clean_cut(video, plan_only=True)
+
+        self.assertEqual(result["status"], "planned")
+        self.assertFalse(result["changed"])
+        self.assertTrue(result["has_candidates"])
+        self.assertIsNone(result["video_output_path"])
+        self.assertEqual(
+            [item["index"] for item in result["candidate_removed_ranges"]],
+            [0, 1],
+        )
+        self.assertEqual(result["artifacts"], [])
+        render.assert_not_called()
+
+    def test_clean_cut_exports_only_selected_candidates(self) -> None:
+        with tempfile.TemporaryDirectory() as temp_dir:
+            root = Path(temp_dir)
+            video = root / "source.mp4"
+            video.write_bytes(b"video")
+
+            def fake_render(_source, _start, _end, output_path):
+                output_path.write_bytes(b"segment")
+
+            def fake_concat(_segments, output_path):
+                output_path.write_bytes(b"output")
+
+            with mock.patch(
+                "popularvideo_cli.local_tools.probe_video_duration",
+                return_value=10.0,
+            ), mock.patch(
+                "popularvideo_cli.local_tools.detect_silence",
+                return_value=[(1.0, 3.0), (5.0, 7.0)],
+            ), mock.patch(
+                "popularvideo_cli.local_tools._render_segment",
+                side_effect=fake_render,
+            ), mock.patch(
+                "popularvideo_cli.local_tools._concat_segments",
+                side_effect=fake_concat,
+            ):
+                result = clean_cut(
+                    video,
+                    out=root / "out",
+                    selected_removal_indexes=[1],
+                )
+
+        self.assertTrue(result["changed"])
+        self.assertEqual(result["selected_removal_indexes"], [1])
+        self.assertEqual(len(result["candidate_removed_ranges"]), 2)
+        self.assertAlmostEqual(result["removed_ranges"][0]["start_sec"], 5.12)
+        self.assertAlmostEqual(result["removed_ranges"][0]["end_sec"], 6.88)
+        self.assertEqual(len(result["artifacts"]), 1)
 
 
 if __name__ == "__main__":

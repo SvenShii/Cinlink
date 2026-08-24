@@ -190,6 +190,7 @@ class RuntimeClient:
         style_preset: str | None = None,
         music_mode: str = "none",
         music_prompt: str | None = None,
+        output_language: str | None = None,
     ) -> dict[str, Any]:
         checked = require_existing_file(video_path)
         fields = {
@@ -199,6 +200,7 @@ class RuntimeClient:
             "style_preset": style_preset,
             "music_mode": music_mode,
             "music_prompt": music_prompt,
+            "output_language": output_language,
         }
         if _looks_like_video(checked):
             with tempfile.TemporaryDirectory(prefix="cinlink-shorten-audio-") as temp_dir:
@@ -1897,7 +1899,13 @@ _FINAL_ARTIFACT_ROLES = {
     "shortened_video",
     "subtitled_video",
 }
-_SUPPORTING_ARTIFACT_ROLES = {"captions", "supporting", "translated_subtitle"}
+_SUPPORTING_ARTIFACT_ROLES = {
+    "captions",
+    "supporting",
+    "translated_subtitle",
+    "web_query_raw",
+}
+_NON_PRIMARY_ARTIFACT_ROLES = {"web_query_raw"}
 _INTERNAL_ARTIFACT_ROLES = {
     "dubbed_audio",
     "intermediate",
@@ -1982,16 +1990,22 @@ def _with_agent_delivery(payload: dict[str, Any]) -> dict[str, Any]:
             artifact, "plan_output_excluded"
         ) in {"1", "true", "yes"}
 
+    def is_non_primary(artifact: dict[str, Any]) -> bool:
+        return role(artifact, "artifact_role") in _NON_PRIMARY_ARTIFACT_ROLES
+
     primary_indexes = {
         index
         for index, artifact in enumerate(artifacts)
-        if str(artifact.get("id") or "") in primary_ids and not is_internal(artifact)
+        if str(artifact.get("id") or "") in primary_ids
+        and not is_internal(artifact)
+        and not is_non_primary(artifact)
     }
     if not primary_indexes:
         primary_indexes = {
             index
             for index, artifact in enumerate(artifacts)
             if not is_internal(artifact)
+            and not is_non_primary(artifact)
             and (
                 role(artifact, "delivery_role") == "primary"
                 or role(artifact, "artifact_role") in _FINAL_ARTIFACT_ROLES
@@ -2014,6 +2028,7 @@ def _with_agent_delivery(payload: dict[str, Any]) -> dict[str, Any]:
             index
             for index, artifact in enumerate(artifacts)
             if not is_internal(artifact)
+            and not is_non_primary(artifact)
             and role(artifact, "plan_node_id") in terminal_ids
         }
     if not primary_indexes:
@@ -2023,6 +2038,7 @@ def _with_agent_delivery(payload: dict[str, Any]) -> dict[str, Any]:
             if str(artifact.get("kind") or "").lower()
             in {"video", "image", "document", "summary", "subtitle", "translation"}
             and not is_internal(artifact)
+            and not is_non_primary(artifact)
         ]
         if deliverable:
             primary_indexes = {deliverable[-1]}
@@ -2030,7 +2046,7 @@ def _with_agent_delivery(payload: dict[str, Any]) -> dict[str, Any]:
             non_internal = [
                 index
                 for index, artifact in enumerate(artifacts)
-                if not is_internal(artifact)
+                if not is_internal(artifact) and not is_non_primary(artifact)
             ]
             if non_internal:
                 primary_indexes = {non_internal[-1]}

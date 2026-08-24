@@ -128,7 +128,8 @@ cinlink --json translate "D:\videos\demo.srt" --to en
 cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --reference-subtitle "D:\videos\source.reference.srt" --lang en
 cinlink --json dub "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt" --lang en --reference-audio "speaker_0=D:\voices\speaker.wav"
 cinlink --json burn "D:\videos\demo.mp4" --subtitle "D:\videos\translated.srt"
-cinlink --json clean-cut "D:\videos\demo.mp4"
+cinlink --json clean-cut "D:\videos\demo.mp4" --plan-only
+cinlink --json clean-cut "D:\videos\demo.mp4" --selected-removals-json "[0,2]"
 cinlink --json trim-video "D:\videos\demo.mp4" --start 12.4 --end 18.8
 cinlink --json montage --clips-json "[{\"path\":\"D:\\videos\\demo.mp4\",\"start_sec\":0,\"end_sec\":4},{\"path\":\"D:\\videos\\demo.mp4\",\"start_sec\":8,\"end_sec\":12}]"
 cinlink --json brand-kit set --enable --font-name Arial --watermark-image "D:\brand\logo.png"
@@ -137,7 +138,7 @@ cinlink --json enhance-image "D:\images\demo.png" --model photo
 cinlink --json enhance-video "D:\videos\demo.mp4" --model photo
 cinlink --json mix-dubbed-audio "D:\videos\demo.mp4" --dubbed-audio "D:\videos\dubbed.wav"
 cinlink --json summarize "D:\videos\demo.mp4"
-cinlink --json shorten "D:\videos\demo.mp4" --target-duration 45
+cinlink --json shorten "D:\videos\demo.mp4" --target-duration 45 --output-language en
 cinlink --json image "a clean product poster" --reference-image-url "D:\brand\product.png"
 cinlink --json video "a 5 second cinematic product reveal"
 cinlink --json video "animate this product" --first-frame-image-url "D:\brand\product.png"
@@ -232,8 +233,8 @@ The `skills/` directory contains installable skills for agent systems that prefe
 | `/cinlink-cli` | Install/configure CLI, store API key, run doctor, inspect tool schemas, use JSON bridge. |
 | `/cinlink-subtitles` | Transcribe, translate subtitles/media, produce bilingual subtitles, burn styled subtitles/watermarks. |
 | `/cinlink-dubbing` | Voice translation, dubbing, dubbed audio generation, local dubbed-audio mixing. |
-| `/cinlink-editing` | Clean Cut, exact clips, montage, local watermarks/Brand Kit, video/audio/editor exports. |
-| `/cinlink-understanding` | Summarize videos, extract highlights, shorten long videos into plans, NLU routing. |
+| `/cinlink-editing` | Review-first Clean Cut, exact clips, montage, local watermarks/Brand Kit, video/audio/editor exports. |
+| `/cinlink-understanding` | Summarize videos, create localized highlight plans, confirm shortening plans, NLU routing. |
 | `/cinlink-generation` | Generate AI images and AI videos with hosted providers and local/remote references. |
 | `/cinlink-deconstruction` | Deconstruct local videos, edit shot plans, replace visual references, regenerate with continuity. |
 | `/cinlink-agent` | Multi-step natural-language media workflows through the hosted CinLink agent runtime. |

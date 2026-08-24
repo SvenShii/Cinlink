@@ -232,19 +232,28 @@ def build_command(tool: str, args: dict) -> list[str]:
             *optional("--out", args.get("out")),
         ]
     if tool == "clean_cut":
-        return base + [
+        command = base + [
             "clean-cut",
             args["video_path"],
             "--minimum-silence",
-            str(args.get("minimum_silence_sec", 0.75)),
+            str(args.get("minimum_silence_sec", 0.85)),
             "--noise-threshold-db",
             str(args.get("noise_threshold_db", -35.0)),
             "--retained-pause",
             str(args.get("retained_pause_sec", 0.24)),
             "--minimum-removal",
             str(args.get("minimum_removal_sec", 0.18)),
-            *optional("--out", args.get("out")),
         ]
+        if args.get("plan_only"):
+            command.append("--plan-only")
+        if args.get("selected_removal_indexes") is not None:
+            command.extend(
+                [
+                    "--selected-removals-json",
+                    json.dumps(args["selected_removal_indexes"], ensure_ascii=False),
+                ]
+            )
+        return command + optional("--out", args.get("out"))
     if tool == "brand_kit":
         action = args.get("action", "show")
         command = base + ["brand-kit", action]
@@ -304,6 +313,7 @@ def build_command(tool: str, args: dict) -> list[str]:
             args.get("music_mode", "none"),
             *optional("--style-preset", args.get("style_preset")),
             *optional("--music-prompt", args.get("music_prompt")),
+            *optional("--output-language", args.get("output_language")),
             *optional("--out", args.get("out")),
         ]
     if tool == "image":

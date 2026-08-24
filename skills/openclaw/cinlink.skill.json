@@ -88,7 +88,7 @@
     },
     {
       "name": "cinlink_clean_cut",
-      "description": "Detect and remove long pauses from a local video while preserving natural pause edges.",
+      "description": "Plan indexed long-pause removals, ask the user to approve them, then export only the selected local ranges.",
       "tool_arg": "clean_cut"
     },
     {
@@ -108,7 +108,7 @@
     },
     {
       "name": "cinlink_shorten",
-      "description": "Create a highlight plan from account-scoped cloud-referenced audio, with compatibility upload fallback, and retain the local source path.",
+      "description": "Create a localized highlight plan from account-scoped cloud-referenced audio, with compatibility upload fallback, and retain the local source path.",
       "tool_arg": "shorten"
     },
     {

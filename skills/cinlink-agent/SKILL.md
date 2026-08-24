@@ -23,7 +23,7 @@ For app-parity routing, pass the explicit current task when it is known:
 cinlink --json agent run "Add English subtitles and return the subtitled video." --context-file /absolute/video.mp4 --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --mode execute --wait
 ```
 
-Useful `--task-intent` values include `add_subtitles`, `translate_and_burn_subtitles`, `dub_video`, `summarize_video`, `shorten_video`, `deconstruct_video`, `edit_video`, `watermark`, `enhance_video`, `multi_video_montage`, `generate_image`, and `generate_video`. Useful `--task-param` keys include `output_delivery`, `target_language`, `source_language`, `subtitle_language`, `translation_mode`, `analysis_scope`, `target_duration_sec`, `require_audio`, `reference_image_urls`, `watermark_text_position`, `watermark_image_position`, `watermark_font_size`, `watermark_opacity`, `watermark_margin`, `watermark_image_width`, `watermark_image_opacity`, and `watermark_image_margin`.
+Useful `--task-intent` values include `add_subtitles`, `translate_and_burn_subtitles`, `dub_video`, `summarize_video`, `shorten_video`, `deconstruct_video`, `edit_video`, `watermark`, `enhance_video`, `multi_video_montage`, `generate_image`, and `generate_video`. Useful `--task-param` keys include `output_delivery`, `output_language`, `target_language`, `source_language`, `subtitle_language`, `translation_mode`, `analysis_scope`, `target_duration_sec`, `require_audio`, `reference_image_urls`, `watermark_text_position`, `watermark_image_position`, `watermark_font_size`, `watermark_opacity`, `watermark_margin`, `watermark_image_width`, `watermark_image_opacity`, and `watermark_image_margin`.
 
 Always pass `--app-language` when the caller knows the user's UI/conversation language (`zh`, `en`, or `ja`). This controls clarification, progress, failure, and completion messages even when the prompt itself is ambiguous.
 
@@ -104,6 +104,8 @@ cinlink --json agent report-tool-result <run_id> --tool-call-id <id> --status do
 
 Current Hermes-first media tools include `stage_audio`, `stage_image`, `stage_subtitle`, `search_analyzed_videos`, `extract_audio`, `extract_video_frames`, `probe_video`, `trim_video`, `crop_resize_video`, `transcode_video`, `apply_watermark`, `burn_subtitles`, `render_highlight_clips`, `render_visual_match_clips`, `render_styled_edit`, `mix_background_music`, `merge_video_clips`, `enhance_image`, `enhance_video`, and `compose_dubbed_video`. General local context tools include `local_file_search`, `local_file_read`, `local_clipboard_read`, `local_screenshot`, and `local_app_context`. Only advertise, execute, and report a local tool when the local environment actually has the matching capability and user authorization.
 
+Before executing a pending `render_highlight_clips` call, inspect its bound `edit_plan` and `output_language`. Present the proposed clips with localized titles/reasons and ask the user to confirm, replan, or cancel. Never infer confirmation from `is_default`. Execute only after explicit confirmation; a replan preserves `output_language`, and cancel leaves the current plan and subtitle context intact without reporting the local tool as completed.
+
 `stage_audio` makes an already authorized local audio file available to a later cloud model step. Report it with the account-scoped upload flag:
 
 ```bash
@@ -122,7 +124,7 @@ Local/server tool arguments use a string-only wire contract. Boolean values are 
 
 Plan steps and local calls may contain `input_collections`, mapping one port to an ordered array of bindings. Resolve every binding in order. Never comma-join multiple bindings into `inputs`, and never collapse a collection to its first artifact.
 
-Hosted plan nodes include `transcribe_audio`, `translate_subtitle`, `synthesize_dub_audio`, `summarize_video`, `shorten_video`, `deconstruct_video`, `generate_image`, `generate_video`, and `server_web_query`. Use `server_web_query` only for current public web information. For a complete editable multi-shot deconstruction, prefer `/cinlink-deconstruction`; the hosted Agent node analyzes an explicitly bound extracted frame.
+Hosted plan nodes include `transcribe_audio`, `translate_subtitle`, `synthesize_dub_audio`, `summarize_video`, `shorten_video`, `deconstruct_video`, `generate_image`, `generate_video`, and `server_web_query`. Use `server_web_query` only for current public web information. Its localized, cited `completion_message` is the authoritative answer; an artifact with `artifact_role=web_query_raw` is supporting evidence only and must never be selected as primary output. For a complete editable multi-shot deconstruction, prefer `/cinlink-deconstruction`; the hosted Agent node analyzes an explicitly bound extracted frame.
 
 When reporting a local subtitle burn, include both the rendered video and the subtitle file when available, and preserve delivery metadata:
 
@@ -140,7 +142,7 @@ When a user asks for the current project/workspace file list, issue a real `loca
 
 Return the run's `privacy_receipt` in user-facing terms: what stayed local, which derived inputs went to CinLink Cloud, and whether final video rendering happened locally.
 
-When a run finishes, use `completion_message` as the user-facing completion text, including any short voice-reference quality warning it contains. Deliver `primary_artifacts` as the actual result, mention `supporting_artifacts` only when useful, and do not present `intermediate_artifacts` as final output. `source_reference_subtitle` and artifacts marked `plan_output_excluded=true` are internal sidecars, not final results. The raw `artifacts` list remains available for compatibility but should not drive final delivery.
+When a run finishes, use `completion_message` as the user-facing completion text, including citations and any short voice-reference quality warning it contains. Deliver `primary_artifacts` as the actual result, mention `supporting_artifacts` only when useful, and do not present `intermediate_artifacts` as final output. `web_query_raw` is supporting-only; `source_reference_subtitle` and artifacts marked `plan_output_excluded=true` are internal sidecars, not final results. The raw `artifacts` list remains available for compatibility but should not drive final delivery.
 
 On failure, show only the returned public `code` and `message`. Preserve safe `details` fields such as `processing_stage`, `provider`, `request_id`, and `retryable` for troubleshooting. Retry only when `retryable=true`; never expose or invent provider internals.
 

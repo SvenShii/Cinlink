@@ -168,6 +168,8 @@ tools:
       noise_threshold_db: number
       retained_pause_sec: number
       minimum_removal_sec: number
+      plan_only: boolean
+      selected_removal_indexes: integer[]
   - name: cinlink_brand_kit
     command: cinlink --json brand-kit "{action}"
     args_schema:
@@ -205,6 +207,7 @@ tools:
       style_preset: string
       music_mode: string
       music_prompt: string
+      output_language: string
       out: string
   - name: cinlink_image
     command: cinlink --json image "{prompt}"

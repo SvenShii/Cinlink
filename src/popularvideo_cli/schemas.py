@@ -287,20 +287,56 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
         "output_schema": {"type": "object"},
     },
     "clean_cut": {
-        "description": "Detect long pauses in a local video with ffmpeg, keep a small natural pause at each edge, remove the rest, and render a shortened video.",
+        "description": "Detect long pauses in a local video with ffmpeg. Use plan_only first to review indexed candidates, then export only user-approved selected_removal_indexes.",
         "input_schema": {
             "type": "object",
             "required": ["video_path"],
             "properties": {
                 "video_path": {"type": "string"},
                 "out": {"type": "string"},
-                "minimum_silence_sec": {"type": "number", "default": 0.75},
+                "minimum_silence_sec": {"type": "number", "default": 0.85},
                 "noise_threshold_db": {"type": "number", "default": -35.0},
                 "retained_pause_sec": {"type": "number", "default": 0.24},
                 "minimum_removal_sec": {"type": "number", "default": 0.18},
+                "plan_only": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "Analyze and return candidate_removed_ranges without rendering a video.",
+                },
+                "selected_removal_indexes": {
+                    "type": "array",
+                    "items": {"type": "integer", "minimum": 0},
+                    "uniqueItems": True,
+                    "description": "Zero-based candidate indexes approved by the user. Omit to export every candidate.",
+                },
             },
         },
-        "output_schema": {"type": "object"},
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "status": {"type": "string", "enum": ["planned", "done"]},
+                "changed": {"type": "boolean"},
+                "has_candidates": {"type": "boolean"},
+                "source_video_path": {"type": "string"},
+                "video_output_path": {"type": ["string", "null"]},
+                "candidate_removed_ranges": {
+                    "type": "array",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "index": {"type": "integer"},
+                            "start_sec": {"type": "number"},
+                            "end_sec": {"type": "number"},
+                            "duration_sec": {"type": "number"},
+                        },
+                    },
+                },
+                "selected_removal_indexes": {"type": "array", "items": {"type": "integer"}},
+                "removed_ranges": {"type": "array"},
+                "keep_ranges": {"type": "array"},
+                "artifacts": {"type": "array"},
+            },
+        },
     },
     "brand_kit": {
         "description": "Show, configure, or clear the persistent local Brand Kit used automatically by later caption and watermark exports.",
@@ -372,6 +408,11 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "style_preset": {"type": "string"},
                 "music_mode": {"type": "string", "default": "none"},
                 "music_prompt": {"type": "string"},
+                "output_language": {
+                    "type": "string",
+                    "enum": ["zh-Hans", "en", "ja"],
+                    "description": "Language for generated clip titles, reasons, and plan presentation.",
+                },
             },
         },
         "output_schema": {"type": "object"},
@@ -675,7 +716,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "task_parameters": {
                     "type": "object",
                     "additionalProperties": {"type": "string"},
-                    "description": "Explicit app slot values such as target_language=en, translation_mode=subtitle|voice, output_delivery=subtitle_file|burned_video, source_language=auto, subtitle_language=en, analysis_scope=camera, target_duration_sec=30, require_audio=true, or watermark style/position values. Free-form translation should resolve translation_mode and subtitle delivery without silently choosing model defaults.",
+                    "description": "Explicit app slot values such as target_language=en, output_language=zh-Hans, translation_mode=subtitle|voice, output_delivery=subtitle_file|burned_video, source_language=auto, subtitle_language=en, analysis_scope=camera, target_duration_sec=30, require_audio=true, or watermark style/position values. Free-form translation should resolve translation_mode and subtitle delivery without silently choosing model defaults.",
                 },
                 "conversation_state": {
                     "type": "object",

@@ -67,7 +67,7 @@ class RuntimeClientMediaUploadTests(unittest.TestCase):
             self.client, "_request", side_effect=fake_request
         ):
             summary = self.client.summarize(self.video)
-            short_plan = self.client.shorten(self.video)
+            short_plan = self.client.shorten(self.video, output_language="ja")
 
         self.assertEqual(uploaded, [("/v1/summarize", ".m4a", True)])
         self.assertEqual(
@@ -78,6 +78,7 @@ class RuntimeClientMediaUploadTests(unittest.TestCase):
             requests[-1][1]["files"],
             {"cloud_file_id": (None, "cloud-audio-1")},
         )
+        self.assertEqual(requests[-1][1]["data"]["output_language"], "ja")
         self.assertEqual(summary["source_video_path"], str(self.video.resolve()))
         self.assertEqual(short_plan["source_video_path"], str(self.video.resolve()))
 

@@ -27,26 +27,36 @@ Both commands require the verified local `waifu2x-ncnn-vulkan` component and mod
 
 ## Clean Cut
 
-Remove long pauses while retaining a short natural pause at each edge:
+Match the app's review-first flow. Analyze candidates without exporting:
 
 ```bash
-cinlink --json clean-cut /absolute/video.mp4 --out /absolute/out
+cinlink --json clean-cut /absolute/video.mp4 --plan-only
 ```
+
+Present every `candidate_removed_ranges` item with its zero-based `index`, start/end time, and duration. Also state the planned total removal. Do not render yet. Ask the user to approve all candidates or identify the indexes to keep selected.
+
+After explicit approval, export only those candidates:
+
+```bash
+cinlink --json clean-cut /absolute/video.mp4 --selected-removals-json '[0,2]' --out /absolute/out
+```
+
+Omit `--selected-removals-json` only when the user explicitly approves every candidate. An empty array exports nothing.
 
 Defaults match the CinLink app workflow:
 
-- minimum silence: `0.75` seconds
+- minimum silence: `0.85` seconds (conservative)
 - noise threshold: `-35` dB
 - retained pause: `0.24` seconds total
 - minimum removal: `0.18` seconds
 
-Override only when the user asks:
+The app's standard and aggressive presets change minimum silence to `0.60` and `0.40` seconds. Use them only when the user requests that sensitivity; otherwise keep the conservative default. Override individual values only when the user asks:
 
 ```bash
 cinlink --json clean-cut /absolute/video.mp4 --minimum-silence 1.0 --retained-pause 0.3 --out /absolute/out
 ```
 
-When `changed` is false, tell the user no qualifying pauses were found and do not claim a new video was created.
+When a plan has `has_candidates=false`, tell the user no qualifying pauses were found and do not ask for export confirmation. A plan always has `changed=false`; that means no file was rendered yet, not that no candidates exist. After export, use `changed` and `video_output_path` to report whether a new video was created.
 
 ## Precise Clip
 

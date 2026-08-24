@@ -208,10 +208,15 @@ def build_parser() -> argparse.ArgumentParser:
     clean = subparsers.add_parser("clean-cut")
     clean.add_argument("video_path")
     clean.add_argument("--out")
-    clean.add_argument("--minimum-silence", type=float, default=0.75, dest="minimum_silence_sec")
+    clean.add_argument("--minimum-silence", type=float, default=0.85, dest="minimum_silence_sec")
     clean.add_argument("--noise-threshold-db", type=float, default=-35.0)
     clean.add_argument("--retained-pause", type=float, default=0.24, dest="retained_pause_sec")
     clean.add_argument("--minimum-removal", type=float, default=0.18, dest="minimum_removal_sec")
+    clean.add_argument("--plan-only", action="store_true")
+    clean.add_argument(
+        "--selected-removals-json",
+        help="JSON array of zero-based candidate removal indexes approved for export.",
+    )
 
     brand_kit = subparsers.add_parser("brand-kit")
     brand_kit_subparsers = brand_kit.add_subparsers(dest="brand_kit_command", required=True)
@@ -261,6 +266,7 @@ def build_parser() -> argparse.ArgumentParser:
     shorten.add_argument("--style-preset")
     shorten.add_argument("--music-mode", default="none")
     shorten.add_argument("--music-prompt")
+    shorten.add_argument("--output-language", choices=["zh-Hans", "en", "ja"])
 
     image = subparsers.add_parser("image")
     image.add_argument("prompt")
@@ -667,6 +673,15 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             noise_threshold_db=args.noise_threshold_db,
             retained_pause_sec=args.retained_pause_sec,
             minimum_removal_sec=args.minimum_removal_sec,
+            plan_only=args.plan_only,
+            selected_removal_indexes=(
+                _parse_json_array(
+                    args.selected_removals_json,
+                    "--selected-removals-json",
+                )
+                if args.selected_removals_json
+                else None
+            ),
         )
     if args.command == "mix-dubbed-audio":
         return mix_dubbed_audio(
@@ -687,6 +702,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             style_preset=args.style_preset,
             music_mode=args.music_mode,
             music_prompt=args.music_prompt,
+            output_language=args.output_language,
         )
     if args.command == "image":
         return client.image(

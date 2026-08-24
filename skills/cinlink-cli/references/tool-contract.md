@@ -106,10 +106,11 @@ Local-only. Requires at least two ranges and preserves their supplied order.
 ### clean-cut
 
 ```bash
-cinlink --json clean-cut <video_path> --minimum-silence 0.75 --retained-pause 0.24 --out <dir_or_mp4>
+cinlink --json clean-cut <video_path> --plan-only
+cinlink --json clean-cut <video_path> --selected-removals-json '[0,2]' --out <dir_or_mp4>
 ```
 
-Local-only. Detects silence with ffmpeg, keeps natural pause edges, and removes qualifying interiors.
+Local-only. First returns indexed `candidate_removed_ranges`; agents must present them and obtain explicit approval before export. The conservative app defaults are minimum silence `0.85`, noise threshold `-35`, retained pause `0.24`, and minimum removal `0.18`. Standard/aggressive minimum-silence presets are `0.60`/`0.40`. `selected_removal_indexes` exports only approved candidates; omit it only after approval of all candidates.
 
 ### brand-kit
 
@@ -140,10 +141,10 @@ Returns summary text, highlights, `source_video_path`, and artifact paths when a
 ### shorten
 
 ```bash
-cinlink --json shorten <video_path> --target-duration 45 --max-clips 5 --out <dir>
+cinlink --json shorten <video_path> --target-duration 45 --max-clips 5 --output-language zh-Hans --out <dir>
 ```
 
-Optional: `--style-preset`, `--music-mode`, `--music-prompt`. The CLI keeps the full video local, uploads extracted audio to the account-scoped Agent file endpoint, then submits its `cloud_file_id` for hosted analysis. It falls back to compatibility multipart upload when an older runtime does not support cloud audio references. The result returns `source_video_path` for later local rendering.
+Optional: `--style-preset`, `--music-mode`, `--music-prompt`, and `--output-language zh-Hans|en|ja`. Output language controls clip titles, reasons, and plan presentation. The CLI keeps the full video local, uploads extracted audio to the account-scoped Agent file endpoint, then submits its `cloud_file_id` for hosted analysis. It falls back to compatibility multipart upload when an older runtime does not support cloud audio references. The result returns `source_video_path` for later local rendering. Present the proposed plan and obtain explicit confirmation before `render_highlight_clips`; preserve its revision and output language across replan, render, or cancel.
 
 ### image
 
@@ -255,7 +256,7 @@ When a clarification has `metadata.clarification_origin=dub_reference_quality`, 
 
 Also available: `agent poll`, `agent events`, `agent local-tools`, `agent report-tool-result`. `agent events` reads public planning/reasoning progress over SSE; it never exposes hidden model scratch work. The report command infers artifact kind for `--artifact-path`. Use `--upload-for-cloud-model-input` when reporting `stage_audio`, `stage_image`, or another non-video local tool output explicitly requested as cloud-model input; it uploads through the authenticated account-scoped Agent file endpoint. It refuses full video uploads. Use repeated `--artifact-json` and `--artifact-metadata-json` to preserve per-artifact roles and lineage.
 
-Completed agent results include `completion_message`, `primary_artifacts`, `supporting_artifacts`, and `intermediate_artifacts`. Deliver primary artifacts as the result, preserve any voice-reference quality warning in the completion message, mention supporting artifacts when useful, and do not present intermediate artifacts as final output. `source_reference_subtitle` and `plan_output_excluded=true` artifacts are internal sidecars.
+Completed agent results include `completion_message`, `primary_artifacts`, `supporting_artifacts`, and `intermediate_artifacts`. Deliver primary artifacts as the result, preserve citations and any voice-reference quality warning in the completion message, mention supporting artifacts when useful, and do not present intermediate artifacts as final output. `web_query_raw` is supporting-only and never primary. `source_reference_subtitle` and `plan_output_excluded=true` artifacts are internal sidecars.
 
 Every media workflow returns canonical `workflow_decision.media_intent` with `operation`, `source`, `output`, and string-valued `parameters`. Entity bindings are under `source.bindings`; legacy subtitle-specific top-level fields are accepted only as compatibility input.
 

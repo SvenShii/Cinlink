@@ -374,12 +374,19 @@ def clean_cut(
     video_path: Path,
     *,
     out: Path | None = None,
-    minimum_silence_sec: float = 0.75,
+    minimum_silence_sec: float = 0.85,
     noise_threshold_db: float = -35.0,
     retained_pause_sec: float = 0.24,
     minimum_removal_sec: float = 0.18,
+    plan_only: bool = False,
+    selected_removal_indexes: list[int] | None = None,
 ) -> dict[str, Any]:
     video = require_existing_file(video_path)
+    if plan_only and selected_removal_indexes is not None:
+        raise CliError(
+            "invalid_input",
+            "plan_only cannot be combined with selected_removal_indexes.",
+        )
     duration = probe_video_duration(video)
     silence_ranges = detect_silence(
         video,
@@ -387,22 +394,57 @@ def clean_cut(
         noise_threshold_db=noise_threshold_db,
         duration_sec=duration,
     )
-    removed_ranges = _clean_cut_removals(
+    candidate_removed_ranges = _clean_cut_removals(
         silence_ranges,
         source_duration_sec=duration,
         retained_pause_sec=retained_pause_sec,
         minimum_removal_sec=minimum_removal_sec,
     )
+    candidate_payloads = [
+        {"index": index, **payload}
+        for index, payload in enumerate(_range_payloads(candidate_removed_ranges))
+    ]
+    planned_removed_duration = sum(end - start for start, end in candidate_removed_ranges)
+    if plan_only:
+        return {
+            "status": "planned",
+            "changed": False,
+            "has_candidates": bool(candidate_removed_ranges),
+            "source_video_path": str(video),
+            "video_output_path": None,
+            "source_duration_sec": duration,
+            "planned_output_duration_sec": duration - planned_removed_duration,
+            "planned_removed_duration_sec": planned_removed_duration,
+            "candidate_removed_ranges": candidate_payloads,
+            "selected_removal_indexes": [],
+            "removed_ranges": [],
+            "keep_ranges": [{"start_sec": 0.0, "end_sec": duration, "duration_sec": duration}],
+            "planned_keep_ranges": _range_payloads(_inverse_ranges(candidate_removed_ranges, duration)),
+            "artifacts": [],
+            "privacy_receipt": _local_privacy_receipt("clean_cut"),
+        }
+
+    if selected_removal_indexes is None:
+        selected_indexes = list(range(len(candidate_removed_ranges)))
+    else:
+        selected_indexes = _validate_removal_indexes(
+            selected_removal_indexes,
+            candidate_count=len(candidate_removed_ranges),
+        )
+    removed_ranges = [candidate_removed_ranges[index] for index in selected_indexes]
     keep_ranges = _inverse_ranges(removed_ranges, duration)
     if not removed_ranges:
         return {
             "status": "done",
             "changed": False,
+            "has_candidates": bool(candidate_removed_ranges),
             "source_video_path": str(video),
             "video_output_path": str(video),
             "source_duration_sec": duration,
             "output_duration_sec": duration,
             "removed_duration_sec": 0.0,
+            "candidate_removed_ranges": candidate_payloads,
+            "selected_removal_indexes": selected_indexes,
             "removed_ranges": [],
             "keep_ranges": [{"start_sec": 0.0, "end_sec": duration}],
             "artifacts": [],
@@ -427,11 +469,14 @@ def clean_cut(
     return {
         "status": "done",
         "changed": True,
+        "has_candidates": True,
         "source_video_path": str(video),
         "video_output_path": str(output_path),
         "source_duration_sec": duration,
         "output_duration_sec": duration - removed_duration,
         "removed_duration_sec": removed_duration,
+        "candidate_removed_ranges": candidate_payloads,
+        "selected_removal_indexes": selected_indexes,
         "removed_ranges": _range_payloads(removed_ranges),
         "keep_ranges": _range_payloads(keep_ranges),
         "artifacts": [artifact_ref_from_path(output_path, metadata=metadata)],
@@ -442,7 +487,7 @@ def clean_cut(
 def detect_silence(
     video_path: Path,
     *,
-    minimum_silence_sec: float = 0.75,
+    minimum_silence_sec: float = 0.85,
     noise_threshold_db: float = -35.0,
     duration_sec: float | None = None,
 ) -> list[tuple[float, float]]:
@@ -728,6 +773,30 @@ def _clean_cut_removals(
         if removal_end - removal_start >= max(float(minimum_removal_sec), 0.01):
             removals.append((removal_start, removal_end))
     return _merge_ranges(removals)
+
+
+def _validate_removal_indexes(indexes: list[int], *, candidate_count: int) -> list[int]:
+    normalized: list[int] = []
+    seen: set[int] = set()
+    for position, value in enumerate(indexes):
+        if isinstance(value, bool) or not isinstance(value, int):
+            raise CliError(
+                "invalid_input",
+                f"selected_removal_indexes[{position}] must be an integer.",
+            )
+        if value < 0 or value >= candidate_count:
+            raise CliError(
+                "invalid_input",
+                f"selected_removal_indexes[{position}] is out of range for {candidate_count} candidates.",
+            )
+        if value in seen:
+            raise CliError(
+                "invalid_input",
+                f"selected_removal_indexes contains duplicate index {value}.",
+            )
+        seen.add(value)
+        normalized.append(value)
+    return sorted(normalized)
 
 
 def _inverse_ranges(ranges: list[tuple[float, float]], duration: float) -> list[tuple[float, float]]:

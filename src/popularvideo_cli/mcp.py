@@ -292,13 +292,18 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             raise CliError("invalid_input", "montage clips must be a JSON array.")
         return create_montage(clips, out=_path(args.get("out")))
     if name == "clean_cut":
+        selected_removal_indexes = args.get("selected_removal_indexes")
+        if selected_removal_indexes is not None and not isinstance(selected_removal_indexes, list):
+            raise CliError("invalid_input", "selected_removal_indexes must be a JSON array.")
         return clean_cut(
             Path(args["video_path"]),
             out=_path(args.get("out")),
-            minimum_silence_sec=float(args.get("minimum_silence_sec", 0.75)),
+            minimum_silence_sec=float(args.get("minimum_silence_sec", 0.85)),
             noise_threshold_db=float(args.get("noise_threshold_db", -35.0)),
             retained_pause_sec=float(args.get("retained_pause_sec", 0.24)),
             minimum_removal_sec=float(args.get("minimum_removal_sec", 0.18)),
+            plan_only=bool(args.get("plan_only", False)),
+            selected_removal_indexes=selected_removal_indexes,
         )
     if name == "mix_dubbed_audio":
         return mix_dubbed_audio(
@@ -319,6 +324,7 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             style_preset=args.get("style_preset"),
             music_mode=args.get("music_mode", "none"),
             music_prompt=args.get("music_prompt"),
+            output_language=args.get("output_language"),
         )
     if name == "image":
         return client.image(

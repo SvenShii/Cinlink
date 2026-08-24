@@ -75,7 +75,7 @@ Agent results use canonical `workflow_decision.media_intent` (`operation`, `sour
 Route to `/cinlink-editing` for:
 
 - "enhance/upscale this image or video"
-- "remove the long pauses" or "Clean Cut"
+- "remove the long pauses" or "Clean Cut" (review indexed candidates before export)
 - "cut 12.4 to 18.8 seconds"
 - "combine these selected ranges into a montage"
 - "apply my logo/Brand Kit"
