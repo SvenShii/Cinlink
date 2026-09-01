@@ -324,6 +324,7 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             style_preset=args.get("style_preset"),
             music_mode=args.get("music_mode", "none"),
             music_prompt=args.get("music_prompt"),
+            selection_instruction=args.get("selection_instruction"),
             output_language=args.get("output_language"),
         )
     if name == "image":
@@ -450,6 +451,8 @@ def call_tool(name: str, args: dict[str, Any]) -> dict[str, Any]:
             include_events=bool(args.get("include_events", False)),
             timeout=_float_or_none(args.get("timeout")),
         )
+    if name == "agent_cancel":
+        return client.cancel_agent_run(str(args["run_id"]))
     if name == "agent_events":
         return client.stream_agent_events(
             str(args["run_id"]),

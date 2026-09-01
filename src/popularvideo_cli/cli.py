@@ -266,6 +266,7 @@ def build_parser() -> argparse.ArgumentParser:
     shorten.add_argument("--style-preset")
     shorten.add_argument("--music-mode", default="none")
     shorten.add_argument("--music-prompt")
+    shorten.add_argument("--selection-instruction")
     shorten.add_argument("--output-language", choices=["zh-Hans", "en", "ja"])
 
     image = subparsers.add_parser("image")
@@ -421,6 +422,8 @@ def build_parser() -> argparse.ArgumentParser:
     clarify.add_argument("--timeout", type=float)
     poll = agent_subparsers.add_parser("poll")
     poll.add_argument("run_id")
+    cancel = agent_subparsers.add_parser("cancel")
+    cancel.add_argument("run_id")
     events = agent_subparsers.add_parser("events")
     events.add_argument("run_id")
     events.add_argument("--last-event-id")
@@ -702,6 +705,7 @@ def run_command(args: argparse.Namespace) -> dict[str, Any]:
             style_preset=args.style_preset,
             music_mode=args.music_mode,
             music_prompt=args.music_prompt,
+            selection_instruction=args.selection_instruction,
             output_language=args.output_language,
         )
     if args.command == "image":
@@ -832,6 +836,8 @@ def run_agent_command(args: argparse.Namespace, client: RuntimeClient) -> dict[s
         )
     if args.agent_command == "poll":
         return client.get_agent_run(args.run_id)
+    if args.agent_command == "cancel":
+        return client.cancel_agent_run(args.run_id)
     if args.agent_command == "events":
         return client.stream_agent_events(
             args.run_id,

@@ -32,6 +32,11 @@
       "tool_arg": "agent_clarify"
     },
     {
+      "name": "cinlink_agent_cancel",
+      "description": "Cancel an active CinLink agent run and ignore any late local result.",
+      "tool_arg": "agent_cancel"
+    },
+    {
       "name": "cinlink_agent_events",
       "description": "Read public planning and reasoning events for a hosted CinLink agent run.",
       "tool_arg": "agent_events"
@@ -108,7 +113,7 @@
     },
     {
       "name": "cinlink_shorten",
-      "description": "Create a localized highlight plan from account-scoped cloud-referenced audio, with compatibility upload fallback, and retain the local source path.",
+      "description": "Create a localized highlight plan from account-scoped cloud-referenced audio, honoring explicit clip-selection preferences and retaining the local source path.",
       "tool_arg": "shorten"
     },
     {

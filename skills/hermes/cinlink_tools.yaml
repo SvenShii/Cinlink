@@ -48,6 +48,10 @@ tools:
       wait: boolean
       include_events: boolean
       timeout: number
+  - name: cinlink_agent_cancel
+    command: cinlink --json agent cancel "{run_id}"
+    args_schema:
+      run_id: string
   - name: cinlink_agent_events
     command: cinlink --json agent events "{run_id}"
     args_schema:
@@ -207,6 +211,7 @@ tools:
       style_preset: string
       music_mode: string
       music_prompt: string
+      selection_instruction: string
       output_language: string
       out: string
   - name: cinlink_image

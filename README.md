@@ -138,7 +138,7 @@ cinlink --json enhance-image "D:\images\demo.png" --model photo
 cinlink --json enhance-video "D:\videos\demo.mp4" --model photo
 cinlink --json mix-dubbed-audio "D:\videos\demo.mp4" --dubbed-audio "D:\videos\dubbed.wav"
 cinlink --json summarize "D:\videos\demo.mp4"
-cinlink --json shorten "D:\videos\demo.mp4" --target-duration 45 --output-language en
+cinlink --json shorten "D:\videos\demo.mp4" --target-duration 45 --selection-instruction "Prefer product demonstrations" --output-language en
 cinlink --json image "a clean product poster" --reference-image-url "D:\brand\product.png"
 cinlink --json video "a 5 second cinematic product reveal"
 cinlink --json video "animate this product" --first-frame-image-url "D:\brand\product.png"
@@ -152,6 +152,7 @@ cinlink --json agent run "Summarize this video into five selling points" --conte
 cinlink --json agent run "Add English subtitles and return the subtitled video" --context-file "D:\videos\demo.mp4" --client-request-id request_123 --task-intent add_subtitles --task-param output_delivery=burned_video --task-param target_language=en --wait --include-events
 cinlink --json agent poll run_xxx
 cinlink --json agent clarify run_xxx --response translation_mode=subtitle --response output_delivery=burned_video --wait
+cinlink --json agent cancel run_xxx
 cinlink --json agent events run_xxx
 cinlink --json agent local-tools run_xxx
 ```
@@ -162,7 +163,7 @@ When an Agent result has `status=requires_user_input` and a non-empty `clarifica
 
 Local Agent `stage_audio`, `stage_image`, and other non-video outputs explicitly requested as cloud-model input must be reported with `--upload-for-cloud-model-input`; this uses the authenticated account-scoped Agent file endpoint. Full source videos remain local. Preserve ordered `input_collections` and `kind=edit_plan` artifacts instead of flattening or replanning them.
 
-Local files passed with `--context-file` are tagged as the current submission and receive highest input priority over stale conversation artifacts. For a currently selected `--context-json` artifact, set `metadata.selection_scope=current_submission` and `metadata.input_priority=highest`; historical descriptors are not elevated automatically. If an explicitly selected generation reference cannot be resolved, ask for that artifact again instead of substituting another image.
+Local files passed with `--context-file` are tagged as the current submission, receive highest input priority, and carry stable path/content identities plus `file_version`. For a currently selected `--context-json` artifact, preserve full ids and source/timeline lineage, then set `metadata.selection_scope=current_submission` and `metadata.input_priority=highest`; historical descriptors are not elevated automatically. If an explicitly selected generation reference cannot be resolved, ask for that artifact again instead of substituting another image. Use `agent cancel` when the user stops a run, and ignore late local outputs after cancellation.
 
 ## Stable JSON Contract
 

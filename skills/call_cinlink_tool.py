@@ -39,6 +39,7 @@ def main() -> int:
             "nlu",
             "agent_run",
             "agent_clarify",
+            "agent_cancel",
             "agent_events",
         ],
     )
@@ -313,6 +314,7 @@ def build_command(tool: str, args: dict) -> list[str]:
             args.get("music_mode", "none"),
             *optional("--style-preset", args.get("style_preset")),
             *optional("--music-prompt", args.get("music_prompt")),
+            *optional("--selection-instruction", args.get("selection_instruction")),
             *optional("--output-language", args.get("output_language")),
             *optional("--out", args.get("out")),
         ]
@@ -452,6 +454,8 @@ def build_command(tool: str, args: dict) -> list[str]:
             command.append("--include-events")
         command.extend(optional("--timeout", args.get("timeout")))
         return command
+    if tool == "agent_cancel":
+        return base + ["agent", "cancel", args["run_id"]]
     if tool == "agent_events":
         return base + [
             "agent",

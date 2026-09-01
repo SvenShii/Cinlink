@@ -2,15 +2,15 @@
   "source": "SvenShii/Cinlink",
   "skills": {
     "cinlink": {
-      "hash": "be4251aab81fe391",
+      "hash": "a8599e0a89d25a99",
       "files": 1
     },
     "cinlink-agent": {
-      "hash": "b25724145156e564",
+      "hash": "f652f647323f0301",
       "files": 1
     },
     "cinlink-cli": {
-      "hash": "ca5ec0a0414cda64",
+      "hash": "5930f630f78f0f1d",
       "files": 3
     },
     "cinlink-deconstruction": {
@@ -18,7 +18,7 @@
       "files": 1
     },
     "cinlink-dubbing": {
-      "hash": "d0007fc128671917",
+      "hash": "d268244b5701cc66",
       "files": 1
     },
     "cinlink-editing": {
@@ -30,11 +30,11 @@
       "files": 1
     },
     "cinlink-subtitles": {
-      "hash": "f26c3932b2cbf3ea",
+      "hash": "75c81c6e75d90b2f",
       "files": 1
     },
     "cinlink-understanding": {
-      "hash": "3f74dd1e5deb398c",
+      "hash": "a006dbdb4bcc0240",
       "files": 1
     }
   }

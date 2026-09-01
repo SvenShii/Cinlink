@@ -104,6 +104,7 @@ cinlink --json tools schema enhance_video
 cinlink --json tools schema deconstruct_video
 cinlink --json tools schema export_editor_project
 cinlink --json tools schema agent_clarify
+cinlink --json tools schema agent_cancel
 cinlink --json tools schema agent_events
 ```
 

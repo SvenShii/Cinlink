@@ -125,6 +125,7 @@ cinlink --json tools list
 cinlink --json tools schema transcribe
 cinlink --json tools schema agent_run
 cinlink --json tools schema agent_clarify
+cinlink --json tools schema agent_cancel
 cinlink --json tools schema setup_local_deps
 cinlink --json tools schema clean_cut
 cinlink --json tools schema brand_kit
@@ -150,6 +151,12 @@ cinlink --json agent run "给这个视频加英文字幕，并输出带字幕视
 
 ```powershell
 cinlink --json agent clarify run_xxx --clarification-id translation_mode:0 --value voice --wait
+```
+
+用户要求停止任务时，取消原 run；取消后不要再上报迟到的本地结果：
+
+```powershell
+cinlink --json agent cancel run_xxx
 ```
 
 文本澄清使用 `--answer`。只有一个澄清时可以省略 `--clarification-id`，多个澄清逐个回答。自由表述的视频翻译会先确认 `translation_mode=subtitle|voice`；选择字幕后，还可能继续确认 `output_delivery=subtitle_file|burned_video`。必须展示第二个问题，不能直接采用默认值。检查 `workflow_decision.slot_provenance`，来源为 `model_default` 或 `unknown` 的执行敏感字段不算用户已确认。该命令会保留原会话、任务框架、上下文文件和复合执行计划；没有 `clarifications` 的安装/授权确认不要调用它。

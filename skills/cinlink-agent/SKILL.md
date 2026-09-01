@@ -41,9 +41,11 @@ For follow-up tasks, preserve rich artifact context from earlier output:
 cinlink --json agent run "Use this generated image as the video reference." --app-language en --context-json '{"name":"generated.png","kind":"image","public_url":"https://...","cloud_file_id":"...","metadata":{"artifact_role":"generated_image","producer_step":"generate_image"}}' --task-intent generate_video --wait
 ```
 
-Use `--context-file` for a plain local path. The CLI marks these files `selection_scope=current_submission` and `input_priority=highest`, so a single newly submitted file outranks stale conversation files. Use repeated `--context-json` when identity or lineage fields such as `id`, `entity_id`, `local_asset_id`, `cloud_file_id`, `public_url`, `artifact_role`, or `producer_step` are available. For an explicitly selected descriptor, set those two metadata fields yourself; historical descriptors are not elevated automatically.
+Use `--context-file` for a plain local path. The CLI marks these files `selection_scope=current_submission` and `input_priority=highest`, and generates full stable `id`, `entity_id`, and `file_version` values, so a single newly submitted file outranks stale conversation files without losing identity. Use repeated `--context-json` when identity or lineage fields such as `id`, `entity_id`, `local_asset_id`, `cloud_file_id`, `public_url`, `artifact_role`, `producer_step`, source version, or timeline owner are available. Preserve complete ids, including the full hash suffix. For an explicitly selected descriptor, set those two priority metadata fields yourself; historical descriptors are not elevated automatically.
 
 When one video and a valid timed SRT/VTT/ASS are passed as local context files, the CLI marks the subtitle reusable and binds it to that video. For multiple subtitles or generated artifacts, use `--context-json` with explicit source lineage and language metadata so the runtime can select the exact target-language subtitle rather than retranscribing or translating it again.
+
+Filename, path, duration, and current UI selection do not prove subtitle ownership. If the runtime returns a subtitle-pair clarification, present the exact subtitle, target video, and recorded source video; continue only after the user explicitly confirms that pair. Never use an original-timeline subtitle on a trimmed/highlight video. A retimed subtitle is reusable only with the edited timeline identified by its timeline metadata.
 
 For image/video generation, an explicitly bound reference must resolve to that exact authorized artifact. If its public URL or cloud identity is unavailable, ask for the selected image again; never substitute another image from conversation history.
 
@@ -56,6 +58,14 @@ The CLI checks a bound local subtitle timeline against the local video's duratio
 ```bash
 cinlink --json agent poll <run_id>
 ```
+
+## Cancel
+
+```bash
+cinlink --json agent cancel <run_id>
+```
+
+Use this when the user asks to stop a queued, running, or local-waiting task. A cancelled run is terminal with public `error.code=cancelled` and `task_frame.status=cancelled`. Stop local processing for that run and do not report late local outputs as completion.
 
 ## Structured Clarifications
 
@@ -124,7 +134,7 @@ Local/server tool arguments use a string-only wire contract. Boolean values are 
 
 Plan steps and local calls may contain `input_collections`, mapping one port to an ordered array of bindings. Resolve every binding in order. Never comma-join multiple bindings into `inputs`, and never collapse a collection to its first artifact.
 
-Hosted plan nodes include `transcribe_audio`, `translate_subtitle`, `synthesize_dub_audio`, `summarize_video`, `shorten_video`, `deconstruct_video`, `generate_image`, `generate_video`, and `server_web_query`. Use `server_web_query` only for current public web information. Its localized, cited `completion_message` is the authoritative answer; an artifact with `artifact_role=web_query_raw` is supporting evidence only and must never be selected as primary output. For a complete editable multi-shot deconstruction, prefer `/cinlink-deconstruction`; the hosted Agent node analyzes an explicitly bound extracted frame.
+Hosted plan nodes include `transcribe_audio`, `translate_subtitle`, `synthesize_dub_audio`, `summarize_video`, `shorten_video`, `plan_highlights`, `deconstruct_video`, `generate_image`, `generate_video`, and `server_web_query`. `plan_highlights` may consume `video_analysis` metadata plus an exact-timeline subtitle and supports selection instructions without retranscribing. Web clients can opt into server-side `analyze_clean_cut`, `render_clean_cut`, `render_video_edl`, and `export_audio_edl`; the standalone CLI must not claim `web_cloud_executor`, so those render steps remain local for skill users. Use `server_web_query` only for current public web information. Its localized, cited `completion_message` is the authoritative answer; an artifact with `artifact_role=web_query_raw` is supporting evidence only and must never be selected as primary output. For a complete editable multi-shot deconstruction, prefer `/cinlink-deconstruction`; the hosted Agent node analyzes an explicitly bound frame or an authorized cloud video only for a cloud-executor client.
 
 When reporting a local subtitle burn, include both the rendered video and the subtitle file when available, and preserve delivery metadata:
 
@@ -136,6 +146,8 @@ cinlink --json agent report-tool-result <run_id> --tool-call-id <id> --status do
 
 For hosted workflows starting from a video, keep the full video local and pass extracted audio to server tools. For typed dubbing/voice-translation plans, expect the split pipeline: local `extract_audio`, server `transcribe_audio` and `translate_subtitle`, server `synthesize_dub_audio`, then local `compose_dubbed_video` when `can_render_video_locally` and `split_dub_pipeline_v1` are available. Never send a local video artifact directly to a server transcription, translation, summary, shortening, or dubbing tool.
 
+If dubbed composition exposes separate background, original-vocal, and translated-voice stems, preserve their exact `*_path`, `*_id`, and `*_cloud_file_id` references plus `dubbed_voice_gain` on the dubbed-video artifact. Do not infer stems from loose files or collapse them before an editor handoff that needs per-line voice controls.
+
 For a shortened voice-dub video, synthesize against the original full-length audio timeline, compose the full-length dubbed video, and only then render the selected highlight clips. Never mix full-timeline dubbed audio directly into an already-shortened video.
 
 When a user asks for the current project/workspace file list, issue a real `local_file_search` call with an empty query, `roots=project`, and an explicit `max_results`. Do not claim to have searched local files, read files, or captured a screenshot unless the corresponding local tool call exists and completed.
@@ -144,7 +156,7 @@ Return the run's `privacy_receipt` in user-facing terms: what stayed local, whic
 
 When a run finishes, use `completion_message` as the user-facing completion text, including citations and any short voice-reference quality warning it contains. Deliver `primary_artifacts` as the actual result, mention `supporting_artifacts` only when useful, and do not present `intermediate_artifacts` as final output. `web_query_raw` is supporting-only; `source_reference_subtitle` and artifacts marked `plan_output_excluded=true` are internal sidecars, not final results. The raw `artifacts` list remains available for compatibility but should not drive final delivery.
 
-On failure, show only the returned public `code` and `message`. Preserve safe `details` fields such as `processing_stage`, `provider`, `request_id`, and `retryable` for troubleshooting. Retry only when `retryable=true`; never expose or invent provider internals.
+On failure, show only the returned public `code` and `message`. Preserve safe `details` fields such as `processing_stage`, `provider`, `request_id`, and `retryable` for troubleshooting. Retry only when `retryable=true`; never retry `cancelled` or expose/invent provider internals.
 
 ## Routing Guidance
 

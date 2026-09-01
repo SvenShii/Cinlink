@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import ExitStack
+import hashlib
 import json
 import math
 from pathlib import Path
@@ -190,6 +191,7 @@ class RuntimeClient:
         style_preset: str | None = None,
         music_mode: str = "none",
         music_prompt: str | None = None,
+        selection_instruction: str | None = None,
         output_language: str | None = None,
     ) -> dict[str, Any]:
         checked = require_existing_file(video_path)
@@ -200,6 +202,7 @@ class RuntimeClient:
             "style_preset": style_preset,
             "music_mode": music_mode,
             "music_prompt": music_prompt,
+            "selection_instruction": selection_instruction,
             "output_language": output_language,
         }
         if _looks_like_video(checked):
@@ -391,6 +394,10 @@ class RuntimeClient:
 
     def get_agent_run(self, run_id: str) -> dict[str, Any]:
         payload = self._request("GET", f"/v1/agent/runs/{run_id}")
+        return _with_agent_privacy_receipt(_with_agent_delivery(payload))
+
+    def cancel_agent_run(self, run_id: str) -> dict[str, Any]:
+        payload = self._request("POST", f"/v1/agent/runs/{run_id}/cancel", json_body={})
         return _with_agent_privacy_receipt(_with_agent_delivery(payload))
 
     def resolve_agent_clarification(
@@ -1526,10 +1533,17 @@ def _context_file_payload(
 ) -> dict[str, Any]:
     checked = require_existing_file(path)
     kind = "subtitle" if checked.suffix.lower() == ".txt" else infer_artifact_kind(checked)
+    identity = _stable_file_identity(checked, is_video=kind == "video")
+    stat = checked.stat()
     metadata = {
-        "file_size_bytes": str(checked.stat().st_size),
+        "entity_id": identity["entity_id"],
+        "file_version": identity["entity_id"],
+        "file_size_bytes": str(stat.st_size),
+        "modified_at": str(stat.st_mtime),
         "artifact_original_name": checked.name,
     }
+    if identity["local_asset_id"]:
+        metadata["local_asset_id"] = identity["local_asset_id"]
     if current_submission:
         metadata.update(
             {
@@ -1545,7 +1559,9 @@ def _context_file_payload(
             }
         )
     return {
-        "id": None,
+        "id": identity["id"],
+        "entity_id": identity["entity_id"],
+        "local_asset_id": identity["local_asset_id"],
         "name": checked.name,
         "kind": kind,
         "local_path": str(checked),
@@ -1599,23 +1615,18 @@ def _annotate_context_relationships(
             for key in (
                 "subtitle_source_video_id",
                 "subtitle_source_video_entity_id",
+                "subtitle_source_video_local_asset_id",
                 "subtitle_source_video_name",
             )
         )
         if not has_source:
             source = _unique_context_video_for_subtitle(item, videos)
             if source is not None:
-                if source.get("id"):
-                    metadata["subtitle_source_video_id"] = str(source["id"])
-                elif source.get("entity_id"):
-                    metadata["subtitle_source_video_entity_id"] = str(
-                        source["entity_id"]
-                    )
-                else:
-                    metadata["subtitle_source_video_name"] = str(source.get("name") or "")
+                _record_subtitle_source(metadata, source)
         else:
             source = _linked_context_video_for_subtitle(metadata, videos)
         if source is not None:
+            _record_subtitle_source(metadata, source, preserve_existing=True)
             _annotate_subtitle_timeline_fit(
                 item,
                 source,
@@ -1626,6 +1637,27 @@ def _annotate_context_relationships(
     return annotated
 
 
+def _record_subtitle_source(
+    metadata: dict[str, Any],
+    source: dict[str, Any],
+    *,
+    preserve_existing: bool = False,
+) -> None:
+    source_metadata = source.get("metadata")
+    source_metadata = source_metadata if isinstance(source_metadata, dict) else {}
+    values = {
+        "subtitle_source_video_id": source.get("id"),
+        "subtitle_source_video_entity_id": source.get("entity_id"),
+        "subtitle_source_video_local_asset_id": source.get("local_asset_id"),
+        "subtitle_source_video_name": source.get("name"),
+        "subtitle_source_video_version": source_metadata.get("file_version"),
+    }
+    for key, value in values.items():
+        normalized = str(value or "").strip()
+        if normalized and (not preserve_existing or not str(metadata.get(key) or "").strip()):
+            metadata[key] = normalized
+
+
 def _linked_context_video_for_subtitle(
     metadata: dict[str, Any],
     videos: list[dict[str, Any]],
@@ -1633,6 +1665,7 @@ def _linked_context_video_for_subtitle(
     references = (
         ("subtitle_source_video_id", "id"),
         ("subtitle_source_video_entity_id", "entity_id"),
+        ("subtitle_source_video_local_asset_id", "local_asset_id"),
         ("subtitle_source_video_name", "name"),
     )
     for metadata_key, video_key in references:
@@ -1861,19 +1894,61 @@ def artifact_ref_from_path(
     metadata: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     checked = require_existing_file(path)
+    artifact_kind = kind or infer_artifact_kind(checked)
+    identity = _stable_file_identity(checked, is_video=artifact_kind == "video")
+    stat = checked.stat()
     normalized_metadata = {
         str(key): str(value)
         for key, value in (metadata or {}).items()
         if value is not None
     }
     normalized_metadata.setdefault("artifact_original_name", checked.name)
+    normalized_metadata.setdefault("entity_id", identity["entity_id"])
+    normalized_metadata.setdefault("file_version", identity["entity_id"])
+    normalized_metadata.setdefault("file_size_bytes", str(stat.st_size))
+    normalized_metadata.setdefault("modified_at", str(stat.st_mtime))
+    if identity["local_asset_id"]:
+        normalized_metadata.setdefault("local_asset_id", identity["local_asset_id"])
     return {
-        "id": None,
+        "id": identity["id"],
         "name": checked.name,
-        "kind": kind or infer_artifact_kind(checked),
+        "kind": artifact_kind,
         "path": str(checked),
         "metadata": normalized_metadata,
     }
+
+
+def _stable_file_identity(path: Path, *, is_video: bool) -> dict[str, str | None]:
+    checked = path.expanduser().resolve()
+    path_digest = hashlib.sha256(str(checked).encode("utf-8")).hexdigest()
+    size, content_digest = _sampled_content_fingerprint(checked)
+    entity_prefix = "local-video-v2" if is_video else "local-file-v2"
+    return {
+        "id": f"local-{path_digest}",
+        "entity_id": f"{entity_prefix}:{size}:{content_digest}",
+        "local_asset_id": path_digest if is_video else None,
+    }
+
+
+def _sampled_content_fingerprint(path: Path) -> tuple[int, str]:
+    sample_size = 64 * 1024
+    size = path.stat().st_size
+    sample_length = min(size, sample_size)
+    offsets = sorted(
+        {
+            0,
+            (size - sample_length) // 2 if size > sample_size else 0,
+            size - sample_length if size > sample_size else 0,
+        }
+    )
+    digest = hashlib.sha256()
+    digest.update(size.to_bytes(8, byteorder="little", signed=False))
+    with path.open("rb") as handle:
+        for offset in offsets:
+            handle.seek(offset)
+            digest.update(offset.to_bytes(8, byteorder="little", signed=False))
+            digest.update(handle.read(sample_size))
+    return size, digest.hexdigest()
 
 
 def _privacy_input_kind(path: Path) -> str:

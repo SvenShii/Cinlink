@@ -18,10 +18,12 @@ For video input, the CLI extracts audio locally with `ffmpeg` and uploads only t
 ## Shorten
 
 ```bash
-cinlink --json shorten /absolute/video.mp4 --target-duration 45 --max-clips 5 --output-language zh-Hans --out /absolute/out
+cinlink --json shorten /absolute/video.mp4 --target-duration 45 --max-clips 5 --selection-instruction "优先保留产品演示，跳过重复介绍" --output-language zh-Hans --out /absolute/out
 ```
 
 Set `--output-language` to the user's conversation/UI language: `zh-Hans`, `en`, or `ja`. It controls generated clip titles, reasons, and plan presentation. The CLI keeps the full video local, uploads extracted audio through the account-scoped Agent file endpoint, and reuses the returned `cloud_file_id` for shortening when the runtime supports it. Older runtimes receive the same audio through compatibility multipart upload. The result preserves `source_video_path`, `output_language`, the highlight plan, and artifact paths when available.
+
+Use `--selection-instruction` for explicit editing preferences such as topics to prioritize, repetitions to avoid, pacing, or mandatory moments. Preserve it when asking for a replan; do not replace it with a generic style preset.
 
 Show the proposed clips and localized reasons before rendering. Ask the user to confirm, request a replan, or cancel. Do not render highlights from a default or merely proposed plan without explicit confirmation. A replan must preserve the requested `output_language`; cancel keeps the current edit plan and subtitle context available without producing a video. After confirmation, preserve `highlight_plan_revision`, `highlight_plan_status`, and `output_language` when handing the plan to `/cinlink-editing` or a `/cinlink-agent` `render_highlight_clips` call.
 
@@ -34,6 +36,7 @@ Optional arguments:
 - `--style-preset`
 - `--music-mode none`
 - `--music-prompt`
+- `--selection-instruction`
 - `--output-language zh-Hans|en|ja`
 
 ## NLU Routing

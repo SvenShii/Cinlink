@@ -66,9 +66,11 @@ Route to `/cinlink-understanding` for:
 
 For video summary and shortening, the current CLI also keeps the full video local, uploads extracted audio for hosted analysis, and preserves the local video path for rendering.
 
-Local files passed to an Agent run are marked as the current submission and receive highest input priority over stale conversation artifacts. Multiple current files remain ambiguous and may still require clarification.
+Local files passed to an Agent run are marked as the current submission, receive highest input priority, and carry stable path/content identity plus file-version evidence. Multiple current files remain ambiguous and may still require clarification; preserve complete ids rather than relying on filenames.
 
 Agent results use canonical `workflow_decision.media_intent` (`operation`, `source`, `output`, `parameters`). Present server-localized structured clarifications according to `input_kind`; `file_select` and `image_select` require the user's exact authorized file. See `/cinlink-agent` for continuation and same-run clarification rules.
+
+When the user asks to stop an active hosted task, route to `/cinlink-agent` and run `cinlink --json agent cancel <run_id>`.
 
 ### Local Editing Workflows
 

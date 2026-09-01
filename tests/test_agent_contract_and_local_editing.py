@@ -19,6 +19,7 @@ from popularvideo_cli.dependencies import default_client_capabilities_from_depen
 from popularvideo_cli.local_tools import _clean_cut_removals, _inverse_ranges, clean_cut
 from popularvideo_cli.local_setup import setup_local_dependencies
 from popularvideo_cli.enhancement import enhance_image
+from popularvideo_cli.mcp import call_tool
 from popularvideo_cli.schemas import TOOL_SCHEMAS
 from popularvideo_cli.workflows import _first_subtitle_artifact
 
@@ -112,6 +113,22 @@ class AgentContractTests(unittest.TestCase):
                 "option_value": "merge_primary",
             },
         )
+
+    def test_mcp_agent_cancel_dispatches_to_runtime(self) -> None:
+        runtime = mock.Mock()
+        runtime.cancel_agent_run.return_value = {
+            "run_id": "run-1",
+            "status": "failed",
+            "error": {"code": "cancelled", "message": "Task stopped."},
+        }
+        with mock.patch(
+            "popularvideo_cli.mcp.load_settings",
+            return_value=Settings(api_key="ck_test"),
+        ), mock.patch("popularvideo_cli.mcp.RuntimeClient", return_value=runtime):
+            result = call_tool("agent_cancel", {"run_id": "run-1"})
+
+        runtime.cancel_agent_run.assert_called_once_with("run-1")
+        self.assertEqual(result["error"]["code"], "cancelled")
 
     def test_artifact_kind_is_inferred_from_extension(self) -> None:
         with tempfile.TemporaryDirectory() as temp_dir:
@@ -388,8 +405,16 @@ class AgentContractTests(unittest.TestCase):
             ]
         )
         shorten = parser.parse_args(
-            ["shorten", "/tmp/source.mp4", "--output-language", "ja"]
+            [
+                "shorten",
+                "/tmp/source.mp4",
+                "--selection-instruction",
+                "Prefer demos",
+                "--output-language",
+                "ja",
+            ]
         )
+        cancel = parser.parse_args(["agent", "cancel", "run-1"])
 
         self.assertEqual(deconstruct.command, "deconstruct-video")
         self.assertEqual(
@@ -409,10 +434,17 @@ class AgentContractTests(unittest.TestCase):
         self.assertTrue(clean.plan_only)
         self.assertEqual(clean.minimum_silence_sec, 0.6)
         self.assertEqual(shorten.output_language, "ja")
+        self.assertEqual(shorten.selection_instruction, "Prefer demos")
+        self.assertEqual(cancel.agent_command, "cancel")
         self.assertEqual(
             TOOL_SCHEMAS["clean_cut"]["input_schema"]["properties"]["minimum_silence_sec"]["default"],
             0.85,
         )
+        self.assertIn("agent_cancel", TOOL_SCHEMAS)
+        context_kinds = TOOL_SCHEMAS["agent_run"]["input_schema"]["properties"][
+            "context_descriptors"
+        ]["items"]["properties"]["kind"]["enum"]
+        self.assertIn("video_analysis", context_kinds)
 
 
 class BrandKitAndEditingTests(unittest.TestCase):

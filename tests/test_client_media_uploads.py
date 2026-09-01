@@ -67,7 +67,11 @@ class RuntimeClientMediaUploadTests(unittest.TestCase):
             self.client, "_request", side_effect=fake_request
         ):
             summary = self.client.summarize(self.video)
-            short_plan = self.client.shorten(self.video, output_language="ja")
+            short_plan = self.client.shorten(
+                self.video,
+                selection_instruction="Prefer the product demo",
+                output_language="ja",
+            )
 
         self.assertEqual(uploaded, [("/v1/summarize", ".m4a", True)])
         self.assertEqual(
@@ -79,6 +83,10 @@ class RuntimeClientMediaUploadTests(unittest.TestCase):
             {"cloud_file_id": (None, "cloud-audio-1")},
         )
         self.assertEqual(requests[-1][1]["data"]["output_language"], "ja")
+        self.assertEqual(
+            requests[-1][1]["data"]["selection_instruction"],
+            "Prefer the product demo",
+        )
         self.assertEqual(summary["source_video_path"], str(self.video.resolve()))
         self.assertEqual(short_plan["source_video_path"], str(self.video.resolve()))
 
@@ -277,6 +285,10 @@ class RuntimeClientMediaUploadTests(unittest.TestCase):
         subtitle = next(item for item in context if item["kind"] == "subtitle")
         self.assertEqual(video["metadata"]["selection_scope"], "current_submission")
         self.assertEqual(video["metadata"]["input_priority"], "highest")
+        self.assertTrue(video["id"].startswith("local-"))
+        self.assertEqual(len(video["id"]), len("local-") + 64)
+        self.assertTrue(video["entity_id"].startswith("local-video-v2:"))
+        self.assertEqual(video["metadata"]["file_version"], video["entity_id"])
         self.assertEqual(subtitle["metadata"]["selection_scope"], "current_submission")
         self.assertEqual(subtitle["metadata"]["input_priority"], "highest")
         self.assertEqual(subtitle["metadata"]["subtitle_has_usable_cues"], "true")
@@ -285,6 +297,49 @@ class RuntimeClientMediaUploadTests(unittest.TestCase):
             subtitle["metadata"]["subtitle_source_video_name"],
             self.video.name,
         )
+        self.assertEqual(
+            subtitle["metadata"]["subtitle_source_video_id"],
+            video["id"],
+        )
+        self.assertEqual(
+            subtitle["metadata"]["subtitle_source_video_entity_id"],
+            video["entity_id"],
+        )
+        self.assertEqual(
+            subtitle["metadata"]["subtitle_source_video_version"],
+            video["metadata"]["file_version"],
+        )
+
+    def test_agent_context_file_version_changes_when_same_path_content_changes(self) -> None:
+        versions: list[str] = []
+        for content in (b"video-v1", b"video-v2"):
+            self.video.write_bytes(content)
+            with patch.object(
+                self.client, "_request", return_value={"run_id": "run-1"}
+            ) as request:
+                self.client.create_agent_run("Inspect this", context_files=[self.video])
+            context = request.call_args.kwargs["json_body"]["context_files"][0]
+            versions.append(context["metadata"]["file_version"])
+
+        self.assertNotEqual(versions[0], versions[1])
+
+    def test_agent_cancel_uses_runtime_cancel_route(self) -> None:
+        with patch.object(
+            self.client,
+            "_request",
+            return_value={
+                "run_id": "run-1",
+                "status": "failed",
+                "task_frame": {"status": "cancelled"},
+                "error": {"code": "cancelled", "message": "Task stopped."},
+            },
+        ) as request:
+            result = self.client.cancel_agent_run("run-1")
+
+        request.assert_called_once_with(
+            "POST", "/v1/agent/runs/run-1/cancel", json_body={}
+        )
+        self.assertEqual(result["error"]["code"], "cancelled")
 
     def test_agent_context_descriptor_is_not_implicitly_current_submission(self) -> None:
         with patch.object(

@@ -141,10 +141,10 @@ Returns summary text, highlights, `source_video_path`, and artifact paths when a
 ### shorten
 
 ```bash
-cinlink --json shorten <video_path> --target-duration 45 --max-clips 5 --output-language zh-Hans --out <dir>
+cinlink --json shorten <video_path> --target-duration 45 --max-clips 5 --selection-instruction "Prefer product demonstrations" --output-language zh-Hans --out <dir>
 ```
 
-Optional: `--style-preset`, `--music-mode`, `--music-prompt`, and `--output-language zh-Hans|en|ja`. Output language controls clip titles, reasons, and plan presentation. The CLI keeps the full video local, uploads extracted audio to the account-scoped Agent file endpoint, then submits its `cloud_file_id` for hosted analysis. It falls back to compatibility multipart upload when an older runtime does not support cloud audio references. The result returns `source_video_path` for later local rendering. Present the proposed plan and obtain explicit confirmation before `render_highlight_clips`; preserve its revision and output language across replan, render, or cancel.
+Optional: `--style-preset`, `--music-mode`, `--music-prompt`, `--selection-instruction`, and `--output-language zh-Hans|en|ja`. Selection instructions express what to include or avoid; output language controls clip titles, reasons, and plan presentation. The CLI keeps the full video local, uploads extracted audio to the account-scoped Agent file endpoint, then submits its `cloud_file_id` for hosted analysis. It falls back to compatibility multipart upload when an older runtime does not support cloud audio references. The result returns `source_video_path` for later local rendering. Present the proposed plan and obtain explicit confirmation before `render_highlight_clips`; preserve its revision, selection intent, and output language across replan, render, or cancel.
 
 ### image
 
@@ -226,17 +226,19 @@ cinlink --json agent run "Add English subtitles and return the subtitled video."
 
 Use repeated `--task-param KEY=VALUE` or `--task-parameters-json '{"key":"value"}'` for explicit slots such as `output_delivery`, `target_language`, `source_language`, `subtitle_language`, and `translation_mode`. Current prompt language and task parameters override historical conversation state. For free-form media translation, resolve `translation_mode=subtitle|voice` first; subtitle mode then requires `output_delivery=subtitle_file|burned_video`. Do not execute either choice from `workflow_decision.slot_provenance` sources `model_default` or `unknown`.
 
-Pass `--app-language zh|en|ja` whenever the caller knows the user's language. Plain `--context-file` values are marked `selection_scope=current_submission` and `input_priority=highest`. Use repeated `--context-json '<object>'` for follow-up artifacts carrying `public_url`, `cloud_file_id`, `artifact_role`, `producer_step`, or other identity/lineage metadata; set the two priority fields in `metadata` only when a descriptor is explicitly selected for the current request.
+Pass `--app-language zh|en|ja` whenever the caller knows the user's language. Plain `--context-file` values are marked `selection_scope=current_submission` and `input_priority=highest`, and receive stable full-length path/content identities plus `file_version`. Use repeated `--context-json '<object>'` for follow-up artifacts carrying `public_url`, `cloud_file_id`, `artifact_role`, `producer_step`, source/timeline lineage, or other identity metadata; preserve complete ids without truncating them. Set the two priority fields in `metadata` only when a descriptor is explicitly selected for the current request.
 
 Use `--hidden-context` or `--hidden-context-file` for invisible client UI context such as selected settings. Do not put secrets there, and do not copy hidden context into assistant-visible output or provider prompts.
 
-The Hermes-first agent may return `execute_plan`, `research_capability`, or `propose_workaround`. Its local media tool set includes audio/subtitle staging, analyzed-video search, audio/frame extraction, probing, trim/crop/transcode, watermark/subtitle burn, highlight/visual/styled rendering, music mixing, clip merging, image/video enhancement, and dubbed-video composition. It can also request authorized local file search/read, clipboard, screenshot, or app context. Hosted nodes include transcription, translation, speech synthesis, summary, shortening, frame deconstruction, image/video generation, and public web query. Only execute a local tool if the corresponding client capability and user authorization are present. Typed dubbing plans use local `extract_audio`, server `transcribe_audio`/`translate_subtitle`/`synthesize_dub_audio`, then local `compose_dubbed_video` when available. For shortened dubbed video, compose the full-length dubbed timeline before highlight rendering.
+The Hermes-first agent may return `execute_plan`, `research_capability`, or `propose_workaround`. Its local media tool set includes audio/subtitle staging, analyzed-video search, audio/frame extraction, probing, trim/crop/transcode, watermark/subtitle burn, highlight/visual/styled rendering, music mixing, clip merging, image/video enhancement, and dubbed-video composition. It can also request authorized local file search/read, clipboard, screenshot, or app context. Hosted nodes include transcription, translation, speech synthesis, summary, `shorten_video`, `plan_highlights`, frame/video deconstruction, image/video generation, and public web query. Web-only cloud executors may also expose Clean Cut/EDL render nodes; a CLI agent must not advertise `web_cloud_executor` and should keep renderer steps local. Only execute a local tool if the corresponding client capability and user authorization are present. Typed dubbing plans use local `extract_audio`, server `transcribe_audio`/`translate_subtitle`/`synthesize_dub_audio`, then local `compose_dubbed_video` when available. For shortened dubbed video, compose the full-length dubbed timeline before highlight rendering.
 
 Agent tool arguments are string-only on the wire. Booleans use `true`/`false`; list-like values may use newline-delimited, comma-delimited, or JSON-array strings.
 
 Use `input_collections` for ordered multi-artifact ports and resolve every binding. Do not comma-join collections into `inputs`. Preserve `kind=edit_plan` artifacts and their `highlight_plan_status`, `highlight_plan_revision`, and `target_duration_sec` metadata so approved plans can be rendered without replanning.
 
 A valid local SRT/VTT/ASS passed with one video is marked reusable and linked to that video. When `ffprobe` is available, the CLI rejects reuse if cue starts exceed video duration plus 1.5 seconds or cue ends exceed the dynamic 3-10 second grace window. With multiple subtitles or images, preserve exact ids, language, artifact role, source lineage, `cloud_file_id`, and `public_url` through `--context-json` so the execution DAG binds the intended artifact.
+
+If the runtime reports a subtitle/video source conflict, show the exact subtitle, requested video, and recorded source video, then require explicit pair confirmation through `agent clarify`. Never convert a filename similarity or matching duration into ownership evidence. A retimed subtitle belongs only to its paired edited timeline.
 
 ### agent clarify
 
@@ -253,6 +255,14 @@ File/image selection clarifications accept an exact option value, stable context
 For `metadata.reply_interpretation=semantic`, the answer remains the continuation prompt and is not asserted as an exact slot. This is required for free-form watermark content that also carries style or placement instructions.
 
 When a clarification has `metadata.clarification_origin=dub_reference_quality`, `agent clarify` sends `merge_primary`, `continue`, or `cancel` to the original run's `/clarification-results` route. It resumes the same run in place and returns `clarification_resolution=in_place`; it does not create a continuation run.
+
+### agent cancel
+
+```bash
+cinlink --json agent cancel <run_id>
+```
+
+Cancel a queued, running, or local-waiting run when the user asks to stop. A cancelled run returns `status=failed`, public `error.code=cancelled`, and `task_frame.status=cancelled`; do not report a later local result as completion.
 
 Also available: `agent poll`, `agent events`, `agent local-tools`, `agent report-tool-result`. `agent events` reads public planning/reasoning progress over SSE; it never exposes hidden model scratch work. The report command infers artifact kind for `--artifact-path`. Use `--upload-for-cloud-model-input` when reporting `stage_audio`, `stage_image`, or another non-video local tool output explicitly requested as cloud-model input; it uploads through the authenticated account-scoped Agent file endpoint. It refuses full video uploads. Use repeated `--artifact-json` and `--artifact-metadata-json` to preserve per-artifact roles and lineage.
 

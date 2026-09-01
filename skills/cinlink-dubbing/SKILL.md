@@ -35,6 +35,8 @@ For a complete dubbed MP4, generate dubbed audio first and then run `mix-dubbed-
 
 When selecting outputs for the next step, prefer `artifact_role=dubbed_audio` for local composition and `artifact_role=dubbed_video` for a completed video. Preserve `producer_step` when reporting local results.
 
+When `compose_dubbed_video` returns independent audio stems, preserve them instead of flattening the result to one mixed file. Carry the exact `background_audio_path|id|cloud_file_id`, `original_vocals_path|id|cloud_file_id`, `dubbed_voice_path|id|cloud_file_id`, and `dubbed_voice_gain` metadata on the dubbed-video artifact. These bindings let the CinLink editor mute, move, delete, or regenerate translated speech per subtitle line without cutting holes in the background/original-vocal tracks. A loose neighboring audio file or a previous mixed output is not proof of a stem.
+
 For a request that both shortens and dubs a video, preserve the original timeline through synthesis: extract/transcribe/translate/synthesize the full-length source, compose the full-length dubbed video, then render the selected highlight clips. Do not mix full-length dubbed audio into an already-shortened video.
 
 Keep the last spoken cue intact through the source timeline end. If the source is already at or below the requested short duration, do not shorten it merely to satisfy a nominal target.

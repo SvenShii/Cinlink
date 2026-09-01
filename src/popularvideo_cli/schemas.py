@@ -408,6 +408,10 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "style_preset": {"type": "string"},
                 "music_mode": {"type": "string", "default": "none"},
                 "music_prompt": {"type": "string"},
+                "selection_instruction": {
+                    "type": "string",
+                    "description": "User editing preference for what the highlight plan should select or avoid.",
+                },
                 "output_language": {
                     "type": "string",
                     "enum": ["zh-Hans", "en", "ja"],
@@ -685,7 +689,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                         "properties": {
                             "path": {"type": "string"},
                             "name": {"type": "string"},
-                            "kind": {"type": "string", "enum": ["video", "audio", "subtitle", "image", "document", "edit_plan", "other"]},
+                            "kind": {"type": "string", "enum": ["video", "audio", "subtitle", "image", "document", "edit_plan", "video_analysis", "other"]},
                             "id": {"type": "string"},
                             "entity_id": {"type": "string"},
                             "local_asset_id": {"type": "string"},
@@ -694,7 +698,7 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                             "metadata": {"type": "object", "additionalProperties": True},
                         },
                     },
-                    "description": "Rich context artifacts for follow-up workflows. Preserve cloud_file_id, public_url, artifact_role, and producer_step from earlier results. For an artifact explicitly selected in the current request, set metadata.selection_scope=current_submission and metadata.input_priority=highest; historical descriptors are not elevated automatically.",
+                    "description": "Rich context artifacts for follow-up workflows. Preserve full stable ids plus cloud_file_id, public_url, artifact_role, producer_step, file_version, and subtitle source/timeline lineage from earlier results. For an artifact explicitly selected in the current request, set metadata.selection_scope=current_submission and metadata.input_priority=highest; historical descriptors are not elevated automatically.",
                 },
                 "client_request_id": {
                     "type": "string",
@@ -886,6 +890,23 @@ TOOL_SCHEMAS: dict[str, dict[str, Any]] = {
                 "primary_artifacts": {"type": "array"},
                 "supporting_artifacts": {"type": "array"},
                 "agent_events": {"type": "array"},
+            },
+        },
+    },
+    "agent_cancel": {
+        "description": "Cancel a queued, running, or local-waiting CinLink Agent run. Late local results are ignored by the runtime after cancellation.",
+        "input_schema": {
+            "type": "object",
+            "required": ["run_id"],
+            "properties": {"run_id": {"type": "string"}},
+        },
+        "output_schema": {
+            "type": "object",
+            "properties": {
+                "run_id": {"type": "string"},
+                "status": {"type": "string"},
+                "error": {"type": ["object", "null"]},
+                "completion_message": {"type": ["string", "null"]},
             },
         },
     },
